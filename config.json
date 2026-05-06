@@ -1,0 +1,12 @@
+{
+  "gatewayUrl": "ws://localhost:18789",
+  "gatewayToken": "",
+  "port": 3000,
+  "host": "0.0.0.0",
+  "cors": { "origin": "*" },
+  "rateLimit": { "windowMs": 60000, "max": 100 },
+  "sessionKey": "webchat:main",
+  "reconnect": { "initialDelay": 1000, "maxDelay": 30000, "multiplier": 2 },
+  "maxWebSocketConnections": 50,
+  "streamTimeout": 120000
+}
