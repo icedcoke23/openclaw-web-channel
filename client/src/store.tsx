@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, type Dispatch, type ReactNode } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, type Dispatch, type ReactNode } from 'react';
 import type {
   PanelType,
   Session,
@@ -17,6 +17,32 @@ import type {
   ChatRun,
   ModelOption,
 } from '@/types';
+
+/* ------------------------------------------------------------------ */
+/*  Theme                                                              */
+/* ------------------------------------------------------------------ */
+
+export type Theme = 'dark' | 'light' | 'system';
+
+function getInitialTheme(): Theme {
+  if (typeof window === 'undefined') return 'system';
+  const saved = localStorage.getItem('theme') as Theme;
+  if (saved && ['dark', 'light', 'system'].includes(saved)) {
+    return saved;
+  }
+  return 'system';
+}
+
+function applyTheme(theme: Theme) {
+  if (typeof window === 'undefined') return;
+  const root = document.documentElement;
+  if (theme === 'system') {
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+  } else {
+    root.setAttribute('data-theme', theme);
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /*  State                                                              */
@@ -45,6 +71,7 @@ export interface AppState {
   configSchema: ConfigSchema[];
   toasts: ToastMessage[];
   pendingRuns: ChatRun[];
+  theme: Theme;
 }
 
 export const initialState: AppState = {
@@ -70,6 +97,7 @@ export const initialState: AppState = {
   configSchema: [],
   toasts: [],
   pendingRuns: [],
+  theme: 'system',
 };
 
 /* ------------------------------------------------------------------ */
@@ -115,7 +143,8 @@ export type AppAction =
   | { type: 'REMOVE_TOAST'; payload: string }
   | { type: 'ADD_PENDING_RUN'; payload: ChatRun }
   | { type: 'REMOVE_PENDING_RUN'; payload: string }
-  | { type: 'CLEAR_PENDING_RUNS' };
+  | { type: 'CLEAR_PENDING_RUNS' }
+  | { type: 'SET_THEME'; payload: Theme };
 
 /* ------------------------------------------------------------------ */
 /*  Reducer                                                            */
@@ -284,6 +313,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'CLEAR_PENDING_RUNS':
       return { ...state, pendingRuns: [] };
 
+    case 'SET_THEME':
+      return { ...state, theme: action.payload };
+
     default:
       return state;
   }
@@ -297,7 +329,26 @@ const AppStateContext = createContext<AppState>(initialState);
 const AppDispatchContext = createContext<Dispatch<AppAction>>(() => {});
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(appReducer, initialState);
+  const [state, dispatch] = useReducer(appReducer, {
+    ...initialState,
+    theme: getInitialTheme(),
+  });
+
+  // Apply theme on mount and when theme changes
+  useEffect(() => {
+    applyTheme(state.theme);
+    localStorage.setItem('theme', state.theme);
+  }, [state.theme]);
+
+  // Listen for system theme changes when in system mode
+  useEffect(() => {
+    if (state.theme !== 'system') return;
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = () => applyTheme('system');
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, [state.theme]);
 
   return (
     <AppStateContext.Provider value={state}>

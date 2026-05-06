@@ -3,7 +3,12 @@ import { useAppState, useAppDispatch } from '@/store';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useApi } from '@/hooks/useApi';
 import Modal from '@/components/Modal';
+import DiffView from './DiffView';
 import type { ConfigEntry, ConfigSchema } from '@/types';
+import Editor from 'react-simple-code-editor';
+import { highlight, languages } from 'prismjs';
+import 'prismjs/components/prism-json';
+import 'prismjs/themes/prism-tomorrow.css';
 
 export default function ConfigPanel() {
   const state = useAppState();
@@ -16,6 +21,10 @@ export default function ConfigPanel() {
   const [activeTab, setActiveTab] = useState<'form' | 'json'>('form');
   const [injectMessage, setInjectMessage] = useState('');
   const [showInject, setShowInject] = useState(false);
+  const [showDiff, setShowDiff] = useState(false);
+  const [originalConfig, setOriginalConfig] = useState<string>('');
+  const [pendingConfig, setPendingConfig] = useState<string>('');
+  const [jsonError, setJsonError] = useState<{ message: string; line?: number } | null>(null);
 
   const loadConfig = useCallback(async () => {
     setLoading(true);
@@ -32,7 +41,10 @@ export default function ConfigPanel() {
           value,
         }));
         dispatch({ type: 'SET_CONFIG', payload: entries });
-        setJsonInput(JSON.stringify(config, null, 2));
+        const jsonStr = JSON.stringify(config, null, 2);
+        setJsonInput(jsonStr);
+        setOriginalConfig(jsonStr);
+        validateJson(jsonStr);
       }
 
       if (schemaRes.status === 'fulfilled' && schemaRes.value) {
@@ -45,24 +57,69 @@ export default function ConfigPanel() {
     }
   }, [rpc, dispatch, addToast]);
 
+  const validateJson = useCallback((value: string): { valid: boolean; error?: string; line?: number } => {
+    try {
+      JSON.parse(value);
+      setJsonError(null);
+      return { valid: true };
+    } catch (e) {
+      const errorMsg = e instanceof Error ? e.message : 'JSON 格式错误';
+      const match = errorMsg.match(/position (\d+)/);
+      let line = 1;
+      if (match) {
+        const position = parseInt(match[1], 10);
+        // 计算行号
+        const lines = value.substring(0, position).split('\n');
+        line = lines.length;
+      }
+      setJsonError({ message: errorMsg, line });
+      return { valid: false, error: errorMsg, line };
+    }
+  }, []);
+
+  const handleJsonChange = useCallback((value: string) => {
+    setJsonInput(value);
+    validateJson(value);
+  }, [validateJson]);
+
   useEffect(() => {
     loadConfig();
   }, [loadConfig]);
 
-  const saveConfig = useCallback(async () => {
-    try {
-      let configObj: Record<string, unknown>;
-      if (activeTab === 'json') {
-        configObj = JSON.parse(jsonInput);
-      } else {
-        configObj = {};
-        state.config.forEach((entry) => {
-          configObj[entry.key] = entry.value;
-        });
-      }
+  const prepareConfigObject = useCallback((): { config: Record<string, unknown>; json: string } => {
+    let configObj: Record<string, unknown>;
+    if (activeTab === 'json') {
+      configObj = JSON.parse(jsonInput);
+    } else {
+      configObj = {};
+      state.config.forEach((entry) => {
+        configObj[entry.key] = entry.value;
+      });
+    }
+    return { config: configObj, json: JSON.stringify(configObj, null, 2) };
+  }, [activeTab, jsonInput, state.config]);
 
-      await rpc('config.set', { config: configObj });
+  const handleSaveClick = useCallback(() => {
+    try {
+      const { json } = prepareConfigObject();
+      setPendingConfig(json);
+      setShowDiff(true);
+    } catch (err) {
+      if (err instanceof SyntaxError) {
+        addToast('error', 'JSON 格式错误', err.message);
+      } else {
+        addToast('error', '准备配置失败', err instanceof Error ? err.message : '未知错误');
+      }
+    }
+  }, [prepareConfigObject, addToast]);
+
+  const confirmSaveConfig = useCallback(async () => {
+    try {
+      const { config } = prepareConfigObject();
+      await rpc('config.set', { config });
       addToast('success', '配置已保存');
+      setShowDiff(false);
+      setOriginalConfig(pendingConfig);
       loadConfig();
     } catch (err) {
       if (err instanceof SyntaxError) {
@@ -71,7 +128,17 @@ export default function ConfigPanel() {
         addToast('error', '保存配置失败', err instanceof Error ? err.message : '未知错误');
       }
     }
-  }, [activeTab, jsonInput, state.config, rpc, addToast, loadConfig]);
+  }, [prepareConfigObject, pendingConfig, rpc, addToast, loadConfig]);
+
+  const cancelSaveConfig = useCallback(() => {
+    setShowDiff(false);
+    setPendingConfig('');
+  }, []);
+
+  // Legacy saveConfig for backward compatibility (direct save without diff)
+  const saveConfig = useCallback(async () => {
+    handleSaveClick();
+  }, [handleSaveClick]);
 
   const updateFormValue = useCallback(
     (key: string, value: unknown) => {
@@ -268,14 +335,44 @@ export default function ConfigPanel() {
 
       {/* JSON view */}
       {activeTab === 'json' && (
-        <div className="bg-bg-tertiary border border-border rounded-xl overflow-hidden">
-          <textarea
-            value={jsonInput}
-            onChange={(e) => setJsonInput(e.target.value)}
-            rows={20}
-            className="w-full px-4 py-3 bg-transparent text-sm text-text-primary font-mono outline-none resize-y"
-            spellCheck={false}
-          />
+        <div className="space-y-2">
+          <div className="bg-bg-tertiary border border-border rounded-xl overflow-hidden">
+            <div className="relative">
+              <Editor
+                value={jsonInput}
+                onValueChange={handleJsonChange}
+                highlight={code => highlight(code, languages.json, 'json')}
+                padding={16}
+                className="font-mono text-sm min-h-[400px]"
+                textareaClassName="focus:outline-none"
+                style={{
+                  fontFamily: '"Fira Code", "Monaco", "Consolas", monospace',
+                  fontSize: 14,
+                  backgroundColor: 'transparent',
+                  color: '#e2e8f0',
+                }}
+              />
+            </div>
+          </div>
+          {jsonError && (
+            <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-danger/10 border border-danger/20">
+              <svg className="w-4 h-4 text-danger shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-danger font-medium">JSON 语法错误 {jsonError.line && `(第 ${jsonError.line} 行)`}</p>
+                <p className="text-xs text-text-muted mt-0.5 truncate">{jsonError.message}</p>
+              </div>
+            </div>
+          )}
+          {!jsonError && jsonInput && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-success/10 border border-success/20">
+              <svg className="w-4 h-4 text-success shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <p className="text-xs text-success font-medium">JSON 格式有效</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -305,6 +402,37 @@ export default function ConfigPanel() {
           >
             注入
           </button>
+        </div>
+      </Modal>
+
+      {/* Diff Preview Modal */}
+      <Modal open={showDiff} onClose={cancelSaveConfig} title="配置变更预览" maxWidth="max-w-4xl">
+        <div className="space-y-4">
+          <p className="text-xs text-text-muted">
+            请查看以下配置变更，确认后保存将生效
+          </p>
+
+          <DiffView
+            oldValue={originalConfig}
+            newValue={pendingConfig}
+            showLineNumbers={true}
+            splitView={false}
+          />
+
+          <div className="flex justify-end gap-2 pt-4 border-t border-border">
+            <button
+              onClick={cancelSaveConfig}
+              className="px-4 py-2 rounded-lg bg-bg-elevated text-sm text-text-muted hover:text-text-secondary transition-colors"
+            >
+              取消
+            </button>
+            <button
+              onClick={confirmSaveConfig}
+              className="px-4 py-2 rounded-lg bg-accent-muted/20 text-sm text-accent hover:bg-accent-muted/30 transition-colors"
+            >
+              确认保存
+            </button>
+          </div>
         </div>
       </Modal>
     </div>

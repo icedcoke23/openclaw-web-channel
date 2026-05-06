@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import { useAppState, useAppDispatch } from '@/store';
 import Header from '@/components/Header';
 import Sidebar from '@/components/Sidebar';
 import Toast from '@/components/Toast';
 import Modal from '@/components/Modal';
 import CommandPalette from '@/components/CommandPalette';
+import ShortcutsHelp from '@/components/ShortcutsHelp';
 import MobileNav from '@/components/layout/MobileNav';
 import ChatPanel from '@/components/chat/ChatPanel';
 import DashboardPanel from '@/components/dashboard/DashboardPanel';
@@ -14,6 +15,8 @@ import LogsPanel from '@/components/logs/LogsPanel';
 import SkillsPanel from '@/components/skills/SkillsPanel';
 import NodesPanel from '@/components/nodes/NodesPanel';
 import CronPanel from '@/components/cron/CronPanel';
+import { useKeyboardShortcuts, getPanelFromAction, type ShortcutAction } from '@/hooks/useKeyboardShortcuts';
+import type { PanelType } from '@/types';
 
 function PanelRouter() {
   const state = useAppState();
@@ -43,6 +46,44 @@ function PanelRouter() {
 export default function App() {
   const state = useAppState();
   const dispatch = useAppDispatch();
+  const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false);
+
+  // Handle keyboard shortcut actions
+  const handleShortcutAction = useCallback((action: ShortcutAction) => {
+    switch (action) {
+      case 'showHelp':
+        setShortcutsHelpOpen(true);
+        break;
+      case 'closeModal':
+        setShortcutsHelpOpen(false);
+        // Also close command palette if open
+        if (state.commandPaletteOpen) {
+          dispatch({ type: 'SET_COMMAND_PALETTE_OPEN', payload: false });
+        }
+        break;
+      case 'focusSearch':
+        dispatch({ type: 'TOGGLE_COMMAND_PALETTE' });
+        break;
+      case 'newSession':
+        // Navigate to chat and create new session
+        dispatch({ type: 'SET_ACTIVE_PANEL', payload: 'chat' });
+        dispatch({ type: 'SET_ACTIVE_SESSION', payload: null });
+        break;
+      default: {
+        // Handle navigation actions
+        const panel = getPanelFromAction(action);
+        if (panel) {
+          dispatch({ type: 'SET_ACTIVE_PANEL', payload: panel });
+        }
+      }
+    }
+  }, [dispatch, state.commandPaletteOpen]);
+
+  // Register keyboard shortcuts
+  useKeyboardShortcuts({
+    onAction: handleShortcutAction,
+    enabled: true,
+  });
 
   // Close sidebar on panel change (mobile)
   const prevPanelRef = React.useRef(state.activePanel);
@@ -93,6 +134,7 @@ export default function App() {
       {/* Overlays */}
       <Toast />
       <CommandPalette />
+      <ShortcutsHelp open={shortcutsHelpOpen} onClose={() => setShortcutsHelpOpen(false)} />
     </div>
   );
 }

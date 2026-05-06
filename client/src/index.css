@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @theme {
-  /* Colors - GitHub Dark theme */
+  /* Colors - Dark theme (default) */
   --color-bg-primary: #0d1117;
   --color-bg-secondary: #161b22;
   --color-bg-tertiary: #1c2128;
@@ -27,6 +27,28 @@
   --animate-slide-in-right: slide-in-right 0.3s ease-out;
   --animate-pulse-dot: pulse-dot 1.4s infinite ease-in-out;
   --animate-slide-out-right: slide-out-right 0.3s ease-in;
+}
+
+/* Light theme */
+[data-theme="light"] {
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #f6f8fa;
+  --color-bg-tertiary: #ffffff;
+  --color-bg-elevated: #f3f4f6;
+  --color-bg-overlay: #e5e7eb;
+  --color-border-primary: #d0d7de;
+  --color-border-secondary: #e5e7eb;
+  --color-text-primary: #1f2328;
+  --color-text-secondary: #656d76;
+  --color-text-muted: #8c959f;
+  --color-text-faint: #afb8c1;
+  --color-accent-blue: #0969da;
+  --color-accent-blue-dark: #0550ae;
+  --color-accent-green: #1a7f37;
+  --color-accent-red: #cf222e;
+  --color-accent-orange: #9a6700;
+  --color-accent-purple: #8250df;
+  --color-accent-cyan: #0a7c7c;
 }
 
 @keyframes fade-in {

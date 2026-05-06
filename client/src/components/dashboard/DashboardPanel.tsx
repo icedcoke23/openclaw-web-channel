@@ -2,7 +2,23 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useAppState, useAppDispatch } from '@/store';
 import { useApi } from '@/hooks/useApi';
 import { formatTime } from '@/lib/markdown';
+import CostCard from './CostCard';
+import TokenCharts from './TokenCharts';
 import type { Channel, CronJob, ActivityItem, DiskUsage } from '@/types';
+
+interface CostData {
+  today: { cost: number; currency: string };
+  thisMonth: { cost: number; currency: string };
+  budget: { amount: number; currency: string; period: string };
+  usagePercent: number;
+  history: Array<{ date: string; cost: number }>;
+}
+
+interface TokenData {
+  hourly: Array<{ hour: string; input: number; output: number }>;
+  byModel: Array<{ model: string; tokens: number }>;
+  total: { input: number; output: number };
+}
 
 function StatCard({
   label,
@@ -36,6 +52,40 @@ export default function DashboardPanel() {
   const { addToast } = useApi();
   const [loading, setLoading] = useState(true);
   const [diskUsage, setDiskUsage] = useState<DiskUsage | null>(null);
+  const [costData, setCostData] = useState<CostData | null>(null);
+  const [costLoading, setCostLoading] = useState(true);
+  const [tokenData, setTokenData] = useState<TokenData | null>(null);
+  const [tokenLoading, setTokenLoading] = useState(true);
+
+  const loadCostData = useCallback(async () => {
+    setCostLoading(true);
+    try {
+      const res = await fetch('/api/metrics/cost');
+      if (res.ok) {
+        const data = await res.json();
+        setCostData(data);
+      }
+    } catch {
+      // Ignore error
+    } finally {
+      setCostLoading(false);
+    }
+  }, []);
+
+  const loadTokenData = useCallback(async () => {
+    setTokenLoading(true);
+    try {
+      const res = await fetch('/api/metrics/tokens');
+      if (res.ok) {
+        const data = await res.json();
+        setTokenData(data);
+      }
+    } catch {
+      // Ignore error
+    } finally {
+      setTokenLoading(false);
+    }
+  }, []);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -92,9 +142,15 @@ export default function DashboardPanel() {
 
   useEffect(() => {
     loadDashboard();
-    const timer = setInterval(loadDashboard, 30000);
+    loadCostData();
+    loadTokenData();
+    const timer = setInterval(() => {
+      loadDashboard();
+      loadCostData();
+      loadTokenData();
+    }, 30000);
     return () => clearInterval(timer);
-  }, [loadDashboard]);
+  }, [loadDashboard, loadCostData, loadTokenData]);
 
   const formatUptime = (seconds?: number): string => {
     if (!seconds) return '-';
@@ -199,6 +255,12 @@ export default function DashboardPanel() {
           }
         />
       </div>
+
+      {/* Cost Tracking Card */}
+      <CostCard data={costData} loading={costLoading} onRefresh={loadCostData} />
+
+      {/* Token Usage Charts */}
+      <TokenCharts data={tokenData} loading={tokenLoading} />
 
       {/* CPU & Memory & Disk */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

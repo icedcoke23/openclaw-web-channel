@@ -4,6 +4,7 @@ import { useWebSocket } from '@/hooks/useWebSocket';
 import { useApi } from '@/hooks/useApi';
 import MessageBubble from './MessageBubble';
 import Lightbox from '@/components/Lightbox';
+import ChatSearch from './ChatSearch';
 import { generateId, formatTokens, formatFileSize } from '@/lib/markdown';
 import type { Message, Attachment, ChatRun } from '@/types';
 
@@ -35,6 +36,16 @@ export default function ChatPanel() {
   // Lightbox state
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string }>({ src: '', alt: '' });
+
+  // Export dropdown state
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
+  // Search modal state
+  const [showSearch, setShowSearch] = useState(false);
+
+  // Message refs for jump to message
+  const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -215,7 +226,8 @@ export default function ChatPanel() {
   }, [state.messages, dispatch, clearAllStreamingTimers, rpc, addToast]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // Ctrl+Enter or Cmd+Enter to send
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       sendMessage();
     }
@@ -311,6 +323,101 @@ export default function ChatPanel() {
   const totalInputTokens = state.messages.reduce((sum, m) => sum + (m.tokens?.input || 0), 0);
   const totalOutputTokens = state.messages.reduce((sum, m) => sum + (m.tokens?.output || 0), 0);
 
+  // Export functions
+  const exportAsMarkdown = (messages: Message[]): string => {
+    return messages.map(m => {
+      const role = m.role === 'user' ? '用户' : '助手';
+      const time = new Date(m.timestamp).toLocaleString('zh-CN');
+      return `## ${role} (${time})\n\n${m.content}\n`;
+    }).join('\n---\n\n');
+  };
+
+  const exportAsJson = (messages: Message[]): string => {
+    return JSON.stringify({
+      session: state.activeSessionId || 'unknown',
+      exportedAt: new Date().toISOString(),
+      messages: messages
+    }, null, 2);
+  };
+
+  const exportAsTxt = (messages: Message[]): string => {
+    return messages.map(m => {
+      const role = m.role === 'user' ? '用户' : '助手';
+      return `[${role}] ${m.content}`;
+    }).join('\n\n');
+  };
+
+  const downloadFile = (content: string, filename: string, type: string) => {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExport = (format: 'markdown' | 'json' | 'txt') => {
+    if (state.messages.length === 0) {
+      addToast('warning', '没有可导出的消息');
+      return;
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const sessionName = state.activeSessionId ? state.activeSessionId.slice(0, 8) : 'chat';
+
+    switch (format) {
+      case 'markdown':
+        downloadFile(exportAsMarkdown(state.messages), `chat-${sessionName}-${timestamp}.md`, 'text/markdown');
+        addToast('success', '已导出为 Markdown');
+        break;
+      case 'json':
+        downloadFile(exportAsJson(state.messages), `chat-${sessionName}-${timestamp}.json`, 'application/json');
+        addToast('success', '已导出为 JSON');
+        break;
+      case 'txt':
+        downloadFile(exportAsTxt(state.messages), `chat-${sessionName}-${timestamp}.txt`, 'text/plain');
+        addToast('success', '已导出为 TXT');
+        break;
+    }
+    setShowExportMenu(false);
+  };
+
+  // Close export menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Jump to message handler
+  const handleJumpToMessage = useCallback((messageId: string) => {
+    const element = messageRefs.current.get(messageId);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Highlight the message briefly
+      element.classList.add('bg-accent/5');
+      setTimeout(() => {
+        element.classList.remove('bg-accent/5');
+      }, 2000);
+    }
+  }, []);
+
+  // Set message ref
+  const setMessageRef = useCallback((id: string) => (el: HTMLDivElement | null) => {
+    if (el) {
+      messageRefs.current.set(id, el);
+    } else {
+      messageRefs.current.delete(id);
+    }
+  }, []);
+
   return (
     <div className="flex flex-col h-full">
       {/* Messages area */}
@@ -345,13 +452,71 @@ export default function ChatPanel() {
           </div>
         ) : (
           <div className="max-w-4xl mx-auto">
+            {/* Messages header with export and search */}
+            <div className="sticky top-0 z-10 flex items-center justify-end gap-2 px-4 py-2 bg-bg-primary/80 backdrop-blur-sm border-b border-border/50">
+              <button
+                onClick={() => setShowSearch(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-elevated text-xs text-text-muted hover:text-text-secondary transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                搜索
+              </button>
+              <div className="relative" ref={exportMenuRef}>
+                <button
+                  onClick={() => setShowExportMenu(!showExportMenu)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-elevated text-xs text-text-muted hover:text-text-secondary transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  导出
+                  <svg className={`w-3 h-3 transition-transform ${showExportMenu ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {showExportMenu && (
+                  <div className="absolute right-0 top-full mt-1 w-40 bg-bg-elevated border border-border rounded-lg shadow-lg py-1 z-50">
+                    <button
+                      onClick={() => handleExport('markdown')}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors text-left"
+                    >
+                      <svg className="w-4 h-4 text-purple" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Markdown
+                    </button>
+                    <button
+                      onClick={() => handleExport('json')}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors text-left"
+                    >
+                      <svg className="w-4 h-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                      </svg>
+                      JSON
+                    </button>
+                    <button
+                      onClick={() => handleExport('txt')}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors text-left"
+                    >
+                      <svg className="w-4 h-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      TXT
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
             {state.messages.map((msg) => (
-              <MessageBubble
-                key={msg.id}
-                message={msg}
-                onCopy={() => addToast('success', '已复制到剪贴板')}
-                onRegenerate={handleRegenerate}
-              />
+              <div key={msg.id} ref={setMessageRef(msg.id)} className="transition-colors duration-500 rounded-lg">
+                <MessageBubble
+                  message={msg}
+                  onCopy={() => addToast('success', '已复制到剪贴板')}
+                  onRegenerate={handleRegenerate}
+                />
+              </div>
             ))}
             <div ref={messagesEndRef} />
           </div>
@@ -473,7 +638,7 @@ export default function ChatPanel() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
-              placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
+              placeholder="输入消息... (Ctrl+Enter 发送)"
               rows={1}
               className="w-full resize-none rounded-xl bg-bg-tertiary border border-border px-4 py-2.5 pr-12 text-sm text-text-primary placeholder-text-faint outline-none focus:border-accent/50 transition-colors max-h-32 overflow-y-auto"
               style={{ minHeight: '42px' }}
@@ -528,6 +693,15 @@ export default function ChatPanel() {
         alt={lightboxImage.alt}
         isOpen={lightboxOpen}
         onClose={closeLightbox}
+      />
+
+      {/* Search Modal */}
+      <ChatSearch
+        isOpen={showSearch}
+        onClose={() => setShowSearch(false)}
+        sessionKey={state.activeSessionId || undefined}
+        onJumpToMessage={handleJumpToMessage}
+        existingMessages={state.messages}
       />
     </div>
   );

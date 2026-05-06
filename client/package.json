@@ -11,13 +11,19 @@
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.2.4",
+    "@types/prismjs": "^1.26.6",
+    "diff": "^5.2.2",
     "dompurify": "^3.1.6",
     "highlight.js": "^11.9.0",
     "marked": "^12.0.0",
+    "prismjs": "^1.30.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-simple-code-editor": "^0.14.1",
+    "recharts": "^2.15.4"
   },
   "devDependencies": {
+    "@types/diff": "^7.0.2",
     "@types/dompurify": "^3.0.5",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

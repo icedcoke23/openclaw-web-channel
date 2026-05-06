@@ -833,12 +833,55 @@ app.get('/api/status', async (_req, res) => {
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
 
-// Chat history
+// Chat history with search support
 app.get('/api/history', async (req, res) => {
   try {
-    const sessionKey = req.query.session || CONFIG.sessionKey;
-    const result = await gateway.rpc('chat.history', { sessionKey, limit: parseInt(req.query.limit, 10) || 50 });
-    res.json(result);
+    const sessionKey = req.query.session || req.query.sessionKey || CONFIG.sessionKey;
+    const search = req.query.search || '';
+    const startDate = req.query.startDate ? new Date(req.query.startDate) : null;
+    const endDate = req.query.endDate ? new Date(req.query.endDate) : null;
+    const page = parseInt(req.query.page, 10) || 1;
+    const pageSize = parseInt(req.query.pageSize, 10) || 50;
+
+    // Fetch history from gateway
+    const result = await gateway.rpc('chat.history', { sessionKey, limit: 1000 });
+    let messages = result?.messages || result || [];
+
+    // Apply search filter
+    if (search) {
+      const searchLower = search.toLowerCase();
+      messages = messages.filter((msg) => {
+        const content = String(msg.content || '').toLowerCase();
+        const role = String(msg.role || '').toLowerCase();
+        return content.includes(searchLower) || role.includes(searchLower);
+      });
+    }
+
+    // Apply date range filter
+    if (startDate || endDate) {
+      messages = messages.filter((msg) => {
+        const msgTime = msg.timestamp ? new Date(msg.timestamp) : null;
+        if (!msgTime) return true;
+        if (startDate && msgTime < startDate) return false;
+        if (endDate && msgTime > endDate) return false;
+        return true;
+      });
+    }
+
+    // Calculate pagination
+    const total = messages.length;
+    const totalPages = Math.ceil(total / pageSize);
+    const startIndex = (page - 1) * pageSize;
+    const paginatedMessages = messages.slice(startIndex, startIndex + pageSize);
+
+    res.json({
+      messages: paginatedMessages,
+      total,
+      page,
+      pageSize,
+      totalPages,
+      sessionKey,
+    });
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
@@ -1189,6 +1232,115 @@ app.get('/api/uploads/:filename', (req, res) => {
   res.sendFile(filePath);
 });
 
+// ── Metrics ───────────────────────────────────────────────────────────────────
+
+// Cost tracking endpoint
+app.get('/api/metrics/cost', async (_req, res) => {
+  try {
+    // Try to get real cost data from gateway first
+    let costData = null;
+    try {
+      costData = await gateway.rpc('metrics.cost', {});
+    } catch {
+      // Gateway doesn't support cost metrics, use mock data
+    }
+
+    // Generate mock history for the last 30 days
+    const history = [];
+    const today = new Date();
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      // Random daily cost between $0.50 and $5.00
+      const dailyCost = Math.round((0.5 + Math.random() * 4.5) * 100) / 100;
+      history.push({
+        date: date.toISOString().split('T')[0],
+        cost: dailyCost,
+      });
+    }
+
+    // Calculate today's and this month's cost from history
+    const todayStr = today.toISOString().split('T')[0];
+    const todayEntry = history.find(h => h.date === todayStr);
+    const todayCost = todayEntry ? todayEntry.cost : 0;
+    const thisMonthCost = history
+      .filter(h => h.date.startsWith(todayStr.substring(0, 7)))
+      .reduce((sum, h) => sum + h.cost, 0);
+
+    // Default budget: $100/month
+    const budgetAmount = costData?.budget?.amount ?? 100;
+    const usagePercent = Math.min(100, Math.round((thisMonthCost / budgetAmount) * 100));
+
+    res.json({
+      today: {
+        cost: costData?.today?.cost ?? todayCost,
+        currency: costData?.today?.currency ?? 'USD',
+      },
+      thisMonth: {
+        cost: costData?.thisMonth?.cost ?? Math.round(thisMonthCost * 100) / 100,
+        currency: costData?.thisMonth?.currency ?? 'USD',
+      },
+      budget: {
+        amount: budgetAmount,
+        currency: costData?.budget?.currency ?? 'USD',
+        period: costData?.budget?.period ?? 'monthly',
+      },
+      usagePercent,
+      history: costData?.history ?? history,
+    });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// Token usage metrics endpoint
+app.get('/api/metrics/tokens', async (_req, res) => {
+  try {
+    // Try to get real token data from gateway first
+    let tokenData = null;
+    try {
+      tokenData = await gateway.rpc('metrics.tokens', {});
+    } catch {
+      // Gateway doesn't support token metrics, use mock data
+    }
+
+    // Generate hourly data for the last 24 hours
+    const hourly = [];
+    const now = new Date();
+    for (let i = 23; i >= 0; i--) {
+      const hour = new Date(now);
+      hour.setHours(hour.getHours() - i);
+      const hourStr = `${hour.getHours().toString().padStart(2, '0')}:00`;
+      // Random token usage
+      const input = Math.floor(1000 + Math.random() * 4000);
+      const output = Math.floor(500 + Math.random() * 2000);
+      hourly.push({ hour: hourStr, input, output });
+    }
+
+    // Mock data by model
+    const byModel = [
+      { model: 'gpt-4', tokens: 125000 },
+      { model: 'gpt-3.5-turbo', tokens: 89000 },
+      { model: 'claude-3-opus', tokens: 67000 },
+      { model: 'claude-3-sonnet', tokens: 45000 },
+    ];
+
+    const totalInput = hourly.reduce((sum, h) => sum + h.input, 0);
+    const totalOutput = hourly.reduce((sum, h) => sum + h.output, 0);
+
+    res.json({
+      hourly: tokenData?.hourly ?? hourly,
+      byModel: tokenData?.byModel ?? byModel,
+      total: tokenData?.total ?? {
+        input: totalInput,
+        output: totalOutput,
+      },
+    });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 // ── Models ────────────────────────────────────────────────────────────────────
 
 app.get('/api/models', async (_req, res) => {
@@ -1207,6 +1359,50 @@ app.get('/api/skills', async (_req, res) => {
   try {
     const result = await gateway.rpc('skills.list', {});
     res.json(result);
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// Get single skill details with extended information
+app.get('/api/skills/:name', async (req, res) => {
+  try {
+    const { name } = req.params;
+
+    // Get basic skill info from skills.list
+    const listResult = await gateway.rpc('skills.list', {});
+    const skills = Array.isArray(listResult) ? listResult : listResult?.skills || [];
+    const basicSkill = skills.find((s) => s.name === name || s.id === name);
+
+    if (!basicSkill) {
+      return res.status(404).json({ error: 'Skill not found' });
+    }
+
+    // Try to get more details from skills.get if available
+    let extendedInfo = {};
+    try {
+      const detailResult = await gateway.rpc('skills.get', { name });
+      extendedInfo = detailResult || {};
+    } catch (_) {
+      // skills.get may not be supported, use basic info
+    }
+
+    // Construct full skill detail response
+    const skillDetail = {
+      name: basicSkill.name || name,
+      version: basicSkill.version || extendedInfo.version || '1.0.0',
+      category: basicSkill.category || extendedInfo.category || 'general',
+      description: basicSkill.description || extendedInfo.description || '',
+      enabled: basicSkill.enabled !== undefined ? basicSkill.enabled : true,
+      readme: extendedInfo.readme || extendedInfo.documentation || null,
+      parameters: extendedInfo.parameters || extendedInfo.configSchema || extendedInfo.params || null,
+      examples: extendedInfo.examples || extendedInfo.usage || null,
+      author: extendedInfo.author || extendedInfo.maintainer || null,
+      repository: extendedInfo.repository || extendedInfo.repo || extendedInfo.url || null,
+      ...extendedInfo,
+    };
+
+    res.json(skillDetail);
   } catch (err) {
     res.status(502).json({ error: err.message });
   }

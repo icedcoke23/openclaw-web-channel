@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useAppState, useAppDispatch } from '@/store';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useApi } from '@/hooks/useApi';
+import SkillDetailModal from './SkillDetailModal';
 import type { Skill } from '@/types';
 
 export default function SkillsPanel() {
@@ -13,6 +14,8 @@ export default function SkillsPanel() {
   const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
 
   const loadSkills = useCallback(async () => {
     setLoading(true);
@@ -31,24 +34,34 @@ export default function SkillsPanel() {
   }, [loadSkills]);
 
   const toggleSkill = useCallback(
-    async (skill: Skill) => {
-      const newEnabled = !skill.enabled;
+    async (skill: Skill, newEnabled?: boolean) => {
+      const enabled = newEnabled !== undefined ? newEnabled : !skill.enabled;
       try {
         await rpc('skills.patch', {
           skillId: skill.id,
-          enabled: newEnabled,
+          enabled: enabled,
         });
         dispatch({
           type: 'UPDATE_SKILL',
-          payload: { ...skill, enabled: newEnabled },
+          payload: { ...skill, enabled: enabled },
         });
-        addToast('success', newEnabled ? `已启用 ${skill.name}` : `已禁用 ${skill.name}`);
+        addToast('success', enabled ? `已启用 ${skill.name}` : `已禁用 ${skill.name}`);
       } catch {
         addToast('error', `切换技能 ${skill.name} 失败`);
       }
     },
     [rpc, dispatch, addToast]
   );
+
+  const openSkillDetail = useCallback((skill: Skill) => {
+    setSelectedSkill(skill);
+    setDetailModalOpen(true);
+  }, []);
+
+  const closeSkillDetail = useCallback(() => {
+    setDetailModalOpen(false);
+    setTimeout(() => setSelectedSkill(null), 200);
+  }, []);
 
   const categories = ['all', ...Array.from(new Set(state.skills.map((s) => s.category).filter(Boolean)))];
 
@@ -136,7 +149,8 @@ export default function SkillsPanel() {
           {filteredSkills.map((skill) => (
             <div
               key={skill.id}
-              className={`bg-bg-tertiary border rounded-xl p-4 transition-colors ${
+              onClick={() => openSkillDetail(skill)}
+              className={`bg-bg-tertiary border rounded-xl p-4 transition-all cursor-pointer hover:shadow-md ${
                 skill.enabled ? 'border-accent/30' : 'border-border'
               }`}
             >
@@ -162,7 +176,10 @@ export default function SkillsPanel() {
 
                 {/* Toggle */}
                 <button
-                  onClick={() => toggleSkill(skill)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleSkill(skill);
+                  }}
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
                     skill.enabled ? 'bg-accent-muted' : 'bg-bg-elevated'
                   }`}
@@ -178,6 +195,14 @@ export default function SkillsPanel() {
           ))}
         </div>
       )}
+
+      {/* Skill Detail Modal */}
+      <SkillDetailModal
+        skill={selectedSkill}
+        open={detailModalOpen}
+        onClose={closeSkillDetail}
+        onToggle={toggleSkill}
+      />
     </div>
   );
 }

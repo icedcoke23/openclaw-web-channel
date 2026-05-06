@@ -1,5 +1,6 @@
 import React from 'react';
 import { useAppState, useAppDispatch } from '@/store';
+import ThemeToggle from './ThemeToggle';
 import type { PanelType } from '@/types';
 
 const PANEL_TABS: { key: PanelType; label: string; icon: string }[] = [
@@ -73,8 +74,10 @@ export default function Header() {
         ))}
       </nav>
 
-      {/* Right: Session badge + Command palette trigger */}
+      {/* Right: Session badge + Command palette trigger + Theme toggle */}
       <div className="flex items-center gap-2">
+        <ThemeToggle />
+
         {state.activeSessionId && (
           <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-bg-elevated text-xs text-text-muted">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
