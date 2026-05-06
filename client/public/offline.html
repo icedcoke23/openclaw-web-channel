@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>离线 - OpenClaw</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .container {
+      text-align: center;
+      max-width: 400px;
+    }
+    
+    .icon {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 24px;
+      background: rgba(88, 166, 255, 0.1);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .icon svg {
+      width: 40px;
+      height: 40px;
+      color: #58a6ff;
+    }
+    
+    h1 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #f0f6fc;
+    }
+    
+    p {
+      font-size: 14px;
+      color: #8b949e;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+    
+    .button {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      background: rgba(88, 166, 255, 0.1);
+      color: #58a6ff;
+      border: 1px solid rgba(88, 166, 255, 0.2);
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    
+    .button:hover {
+      background: rgba(88, 166, 255, 0.2);
+    }
+    
+    .status {
+      margin-top: 24px;
+      padding: 12px 16px;
+      background: rgba(48, 54, 61, 0.5);
+      border-radius: 8px;
+      font-size: 12px;
+      color: #8b949e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #f85149;
+      animation: pulse 2s infinite;
+    }
+    
+    .status.online .status-dot {
+      background: #3fb950;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
+      </svg>
+    </div>
+    <h1>您已离线</h1>
+    <p>无法连接到 OpenClaw 服务器。请检查您的网络连接，然后重试。</p>
+    <a href="/" class="button">
+      <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+      </svg>
+      重新连接
+    </a>
+    <div class="status" id="status">
+      <span class="status-dot"></span>
+      <span id="statusText">等待网络连接...</span>
+    </div>
+  </div>
+  
+  <script>
+    const statusEl = document.getElementById('status');
+    const statusTextEl = document.getElementById('statusText');
+    
+    function updateStatus() {
+      if (navigator.onLine) {
+        statusEl.classList.add('online');
+        statusTextEl.textContent = '网络已恢复，正在重定向...';
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 1500);
+      } else {
+        statusEl.classList.remove('online');
+        statusTextEl.textContent = '等待网络连接...';
+      }
+    }
+    
+    window.addEventListener('online', updateStatus);
+    window.addEventListener('offline', updateStatus);
+    
+    // Check status periodically
+    setInterval(updateStatus, 3000);
+  </script>
+</body>
+</html>

@@ -1,7 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppState, useAppDispatch } from '@/store';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useApi } from '@/hooks/useApi';
+import { useNotifications } from '@/hooks/useNotifications';
+import { useVoiceInput } from '@/hooks/useVoiceInput';
 import MessageBubble from './MessageBubble';
 import Lightbox from '@/components/Lightbox';
 import ChatSearch from './ChatSearch';
@@ -9,10 +12,13 @@ import { generateId, formatTokens, formatFileSize } from '@/lib/markdown';
 import type { Message, Attachment, ChatRun } from '@/types';
 
 export default function ChatPanel() {
+  const { t } = useTranslation();
   const state = useAppState();
   const dispatch = useAppDispatch();
   const { rpc, subscribe, startStreamingTimer, stopStreamingTimer, clearAllStreamingTimers } = useWebSocket();
   const { addToast } = useApi();
+  const { permission: notificationPermission, showNotification } = useNotifications();
+  const { isRecording, transcript, startRecording, stopRecording, error: voiceError } = useVoiceInput();
 
   // Load models on mount
   useEffect(() => {
@@ -64,6 +70,20 @@ export default function ChatPanel() {
     }
   }, [state.activePanel]);
 
+  // Handle voice transcript
+  useEffect(() => {
+    if (transcript) {
+      setInput((prev) => prev + (prev ? ' ' : '') + transcript);
+    }
+  }, [transcript]);
+
+  // Handle voice error
+  useEffect(() => {
+    if (voiceError) {
+      addToast('error', voiceError);
+    }
+  }, [voiceError, addToast]);
+
   // Subscribe to streaming events
   useEffect(() => {
     const unsubStream = subscribe('chat.stream', (params) => {
@@ -75,7 +95,16 @@ export default function ChatPanel() {
         runId?: string;
       };
 
-      if (sessionId !== state.activeSessionId) return;
+      if (sessionId !== state.activeSessionId) {
+        // Show notification for messages in other sessions
+        if (done && state.notificationsEnabled && notificationPermission === 'granted' && document.hidden) {
+          showNotification(t('notifications.newMessage'), {
+            body: t('notifications.clickToView'),
+            tag: sessionId,
+          });
+        }
+        return;
+      }
 
       if (done) {
         // Mark streaming complete
@@ -89,6 +118,14 @@ export default function ChatPanel() {
         dispatch({ type: 'SET_STREAMING', payload: false });
         if (runId) stopStreamingTimer(runId);
         currentRunIdRef.current = null;
+
+        // Show notification if tab is not visible
+        if (state.notificationsEnabled && notificationPermission === 'granted' && document.hidden) {
+          showNotification(t('notifications.newMessage'), {
+            body: t('notifications.clickToView'),
+            tag: sessionId,
+          });
+        }
         return;
       }
 
@@ -110,7 +147,7 @@ export default function ChatPanel() {
 
     const unsubError = subscribe('chat.error', (params) => {
       const { message } = params as { message: string };
-      addToast('error', '对话错误', message);
+      addToast('error', t('common.error'), message);
       dispatch({ type: 'SET_STREAMING', payload: false });
       clearAllStreamingTimers();
       currentRunIdRef.current = null;
@@ -120,7 +157,7 @@ export default function ChatPanel() {
       unsubStream();
       unsubError();
     };
-  }, [subscribe, state.activeSessionId, state.messages, dispatch, addToast, stopStreamingTimer, clearAllStreamingTimers]);
+  }, [subscribe, state.activeSessionId, state.messages, dispatch, addToast, stopStreamingTimer, clearAllStreamingTimers, notificationPermission, showNotification, t, state.notificationsEnabled]);
 
   const sendMessage = useCallback(async () => {
     const text = input.trim();
@@ -133,7 +170,7 @@ export default function ChatPanel() {
     if (!sessionId) {
       try {
         const result = await rpc('sessions.create', {
-          title: text.slice(0, 50) || '新会话',
+          title: text.slice(0, 50) || t('sessions.create'),
         });
         const session = result as { id: string; title?: string };
         if (session?.id) {
@@ -148,11 +185,11 @@ export default function ChatPanel() {
           });
           dispatch({ type: 'SET_ACTIVE_SESSION', payload: session.id });
         } else {
-          addToast('error', '创建会话失败');
+          addToast('error', t('chat.createSessionError'));
           return;
         }
       } catch {
-        addToast('error', '创建会话失败');
+        addToast('error', t('chat.createSessionError'));
         return;
       }
     }
@@ -201,12 +238,12 @@ export default function ChatPanel() {
         model: state.selectedModel || undefined,
       });
     } catch (err) {
-      addToast('error', '发送失败', err instanceof Error ? err.message : '未知错误');
+      addToast('error', t('chat.sendError'), err instanceof Error ? err.message : t('common.error'));
       dispatch({ type: 'SET_STREAMING', payload: false });
       stopStreamingTimer(runId);
       currentRunIdRef.current = null;
     }
-  }, [input, attachments, state.isStreaming, state.activeSessionId, state.thinkingEnabled, state.selectedModel, rpc, dispatch, addToast, startStreamingTimer, stopStreamingTimer]);
+  }, [input, attachments, state.isStreaming, state.activeSessionId, state.thinkingEnabled, state.selectedModel, rpc, dispatch, addToast, startStreamingTimer, stopStreamingTimer, t]);
 
   const handleAbort = useCallback(() => {
     clearAllStreamingTimers();
@@ -222,8 +259,8 @@ export default function ChatPanel() {
     }
     // Actually abort the chat run on the gateway
     rpc('chat.abort', {}).catch(() => {});
-    addToast('info', '已停止生成');
-  }, [state.messages, dispatch, clearAllStreamingTimers, rpc, addToast]);
+    addToast('info', t('chat.stopped'));
+  }, [state.messages, dispatch, clearAllStreamingTimers, rpc, addToast, t]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Ctrl+Enter or Cmd+Enter to send
@@ -261,7 +298,7 @@ export default function ChatPanel() {
     for (const file of Array.from(files)) {
       try {
         if (file.size > 10 * 1024 * 1024) {
-          addToast('warning', '文件过大', `${file.name} 超过 10MB 限制`);
+          addToast('warning', t('common.warning'), `${file.name} > 10MB`);
           continue;
         }
         const formData = new FormData();
@@ -326,8 +363,8 @@ export default function ChatPanel() {
   // Export functions
   const exportAsMarkdown = (messages: Message[]): string => {
     return messages.map(m => {
-      const role = m.role === 'user' ? '用户' : '助手';
-      const time = new Date(m.timestamp).toLocaleString('zh-CN');
+      const role = m.role === 'user' ? t('chat.user') : t('chat.assistant');
+      const time = new Date(m.timestamp).toLocaleString();
       return `## ${role} (${time})\n\n${m.content}\n`;
     }).join('\n---\n\n');
   };
@@ -342,7 +379,7 @@ export default function ChatPanel() {
 
   const exportAsTxt = (messages: Message[]): string => {
     return messages.map(m => {
-      const role = m.role === 'user' ? '用户' : '助手';
+      const role = m.role === 'user' ? t('chat.user') : t('chat.assistant');
       return `[${role}] ${m.content}`;
     }).join('\n\n');
   };
@@ -361,7 +398,7 @@ export default function ChatPanel() {
 
   const handleExport = (format: 'markdown' | 'json' | 'txt') => {
     if (state.messages.length === 0) {
-      addToast('warning', '没有可导出的消息');
+      addToast('warning', t('chat.noMessages'));
       return;
     }
 
@@ -371,15 +408,15 @@ export default function ChatPanel() {
     switch (format) {
       case 'markdown':
         downloadFile(exportAsMarkdown(state.messages), `chat-${sessionName}-${timestamp}.md`, 'text/markdown');
-        addToast('success', '已导出为 Markdown');
+        addToast('success', t('chat.exportMarkdown'));
         break;
       case 'json':
         downloadFile(exportAsJson(state.messages), `chat-${sessionName}-${timestamp}.json`, 'application/json');
-        addToast('success', '已导出为 JSON');
+        addToast('success', t('chat.exportJson'));
         break;
       case 'txt':
         downloadFile(exportAsTxt(state.messages), `chat-${sessionName}-${timestamp}.txt`, 'text/plain');
-        addToast('success', '已导出为 TXT');
+        addToast('success', t('chat.exportTxt'));
         break;
     }
     setShowExportMenu(false);
@@ -418,6 +455,15 @@ export default function ChatPanel() {
     }
   }, []);
 
+  // Toggle voice recording
+  const toggleVoiceRecording = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Messages area */}
@@ -434,12 +480,12 @@ export default function ChatPanel() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             </div>
-            <h2 className="text-lg font-semibold text-text-primary mb-2">OpenClaw AI 助手</h2>
+            <h2 className="text-lg font-semibold text-text-primary mb-2">{t('chat.title')}</h2>
             <p className="text-sm text-text-muted max-w-md">
-              输入消息开始对话。支持拖拽文件上传、Shift+Enter 换行。
+              {t('chat.emptyState')}
             </p>
             <div className="flex flex-wrap gap-2 mt-4 justify-center">
-              {['帮我写一段代码', '解释一下这个概念', '分析一下数据'].map((suggestion) => (
+              {[t('chat.suggestion1'), t('chat.suggestion2'), t('chat.suggestion3')].map((suggestion) => (
                 <button
                   key={suggestion}
                   onClick={() => setInput(suggestion)}
@@ -461,7 +507,7 @@ export default function ChatPanel() {
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
-                搜索
+                {t('chat.search')}
               </button>
               <div className="relative" ref={exportMenuRef}>
                 <button
@@ -471,7 +517,7 @@ export default function ChatPanel() {
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                   </svg>
-                  导出
+                  {t('chat.export')}
                   <svg className={`w-3 h-3 transition-transform ${showExportMenu ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
@@ -513,7 +559,7 @@ export default function ChatPanel() {
               <div key={msg.id} ref={setMessageRef(msg.id)} className="transition-colors duration-500 rounded-lg">
                 <MessageBubble
                   message={msg}
-                  onCopy={() => addToast('success', '已复制到剪贴板')}
+                  onCopy={() => addToast('success', t('chat.copySuccess'))}
                   onRegenerate={handleRegenerate}
                 />
               </div>
@@ -525,7 +571,7 @@ export default function ChatPanel() {
         {/* Drag overlay */}
         {isDragging && (
           <div className="fixed inset-0 bg-accent/5 border-2 border-dashed border-accent/30 z-30 flex items-center justify-center pointer-events-none">
-            <div className="text-accent text-sm font-medium">拖放文件到此处上传</div>
+            <div className="text-accent text-sm font-medium">{t('chat.dragDrop')}</div>
           </div>
         )}
       </div>
@@ -587,9 +633,9 @@ export default function ChatPanel() {
         {/* Token/context bar */}
         {(totalInputTokens > 0 || totalOutputTokens > 0) && (
           <div className="flex items-center gap-3 px-4 pt-2 text-[10px] text-text-faint">
-            <span>输入: {formatTokens(totalInputTokens)} tokens</span>
-            <span>输出: {formatTokens(totalOutputTokens)} tokens</span>
-            <span>共 {state.messages.length} 条消息</span>
+            <span>{t('chat.inputTokens')}: {formatTokens(totalInputTokens)} tokens</span>
+            <span>{t('chat.outputTokens')}: {formatTokens(totalOutputTokens)} tokens</span>
+            <span>{state.messages.length} {t('sessions.messages')}</span>
           </div>
         )}
 
@@ -601,9 +647,9 @@ export default function ChatPanel() {
               value={state.selectedModel}
               onChange={(e) => dispatch({ type: 'SET_SELECTED_MODEL', payload: e.target.value })}
               className="px-2 py-2 rounded-lg bg-bg-tertiary border border-border text-xs text-text-primary outline-none focus:border-accent/50 transition-colors shrink-0 max-w-[120px]"
-              title="选择模型"
+              title={t('chat.selectModel')}
             >
-              <option value="">默认模型</option>
+              <option value="">{t('chat.defaultModel')}</option>
               {state.models.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name}
@@ -616,7 +662,7 @@ export default function ChatPanel() {
           <button
             onClick={() => fileInputRef.current?.click()}
             className="p-2 hover:bg-bg-elevated rounded-lg transition-colors text-text-muted hover:text-text-secondary shrink-0"
-            title="上传文件"
+            title={t('chat.uploadFile')}
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
@@ -638,11 +684,33 @@ export default function ChatPanel() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
-              placeholder="输入消息... (Ctrl+Enter 发送)"
+              placeholder={t('chat.placeholder')}
               rows={1}
-              className="w-full resize-none rounded-xl bg-bg-tertiary border border-border px-4 py-2.5 pr-12 text-sm text-text-primary placeholder-text-faint outline-none focus:border-accent/50 transition-colors max-h-32 overflow-y-auto"
+              className="w-full resize-none rounded-xl bg-bg-tertiary border border-border px-4 py-2.5 pr-24 text-sm text-text-primary placeholder-text-faint outline-none focus:border-accent/50 transition-colors max-h-32 overflow-y-auto"
               style={{ minHeight: '42px' }}
             />
+            
+            {/* Voice input button inside textarea */}
+            <button
+              onClick={toggleVoiceRecording}
+              className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md transition-colors ${
+                isRecording
+                  ? 'bg-danger/20 text-danger animate-pulse'
+                  : 'text-text-muted hover:text-text-secondary hover:bg-bg-elevated'
+              }`}
+              title={isRecording ? t('chat.stopRecording') : t('chat.voiceInput')}
+            >
+              {isRecording ? (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                </svg>
+              )}
+            </button>
           </div>
 
           {/* Thinking toggle */}
@@ -653,7 +721,7 @@ export default function ChatPanel() {
                 ? 'bg-purple/20 text-purple'
                 : 'hover:bg-bg-elevated text-text-muted hover:text-text-secondary'
             }`}
-            title={state.thinkingEnabled ? '关闭思考模式' : '开启思考模式'}
+            title={state.thinkingEnabled ? t('chat.thinkingOff') : t('chat.thinking')}
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
@@ -665,7 +733,7 @@ export default function ChatPanel() {
             <button
               onClick={handleAbort}
               className="p-2 rounded-lg bg-danger/20 text-danger hover:bg-danger/30 transition-colors shrink-0"
-              title="停止生成"
+              title={t('chat.stop')}
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -677,7 +745,7 @@ export default function ChatPanel() {
               onClick={sendMessage}
               disabled={!input.trim() && attachments.length === 0}
               className="p-2 rounded-lg bg-accent-muted/20 text-accent hover:bg-accent-muted/30 transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
-              title="发送消息"
+              title={t('chat.send')}
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />

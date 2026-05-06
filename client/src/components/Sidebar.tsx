@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppState, useAppDispatch } from '@/store';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useApi } from '@/hooks/useApi';
@@ -6,6 +7,7 @@ import { formatTime, generateId } from '@/lib/markdown';
 import type { Session } from '@/types';
 
 export default function Sidebar() {
+  const { t } = useTranslation();
   const state = useAppState();
   const dispatch = useAppDispatch();
   const { rpc } = useWebSocket();
@@ -27,9 +29,9 @@ export default function Sidebar() {
       const sessions = (result as Session[]) || [];
       dispatch({ type: 'SET_SESSIONS', payload: sessions });
     } catch {
-      addToast('error', '加载会话失败');
+      addToast('error', t('sessions.loadError'));
     }
-  }, [rpc, dispatch, addToast]);
+  }, [rpc, dispatch, addToast, t]);
 
   useEffect(() => {
     loadSessions();
@@ -38,18 +40,18 @@ export default function Sidebar() {
   const createSession = useCallback(async () => {
     try {
       const result = await rpc('sessions.create', {
-        title: `新会话 ${new Date().toLocaleString('zh-CN')}`,
+        title: `${t('sessions.create')} ${new Date().toLocaleString()}`,
       });
       const session = result as Session;
       if (session) {
         dispatch({ type: 'ADD_SESSION', payload: session });
         dispatch({ type: 'SET_ACTIVE_SESSION', payload: session.id });
-        addToast('success', '会话已创建');
+        addToast('success', t('sessions.createSuccess'));
       }
     } catch {
-      addToast('error', '创建会话失败');
+      addToast('error', t('sessions.createError'));
     }
-  }, [rpc, dispatch, addToast]);
+  }, [rpc, dispatch, addToast, t]);
 
   const switchSession = useCallback(
     (id: string) => {
@@ -67,12 +69,12 @@ export default function Sidebar() {
     >
       {/* Header */}
       <div className="h-14 flex items-center justify-between px-4 border-b border-border shrink-0">
-        <h2 className="text-sm font-semibold text-text-primary">会话列表</h2>
+        <h2 className="text-sm font-semibold text-text-primary">{t('sessions.title')}</h2>
         <div className="flex items-center gap-1">
           <button
             onClick={loadSessions}
             className="p-1.5 hover:bg-bg-elevated rounded-md transition-colors text-text-muted hover:text-text-secondary"
-            title="刷新"
+            title={t('common.refresh')}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -81,7 +83,7 @@ export default function Sidebar() {
           <button
             onClick={createSession}
             className="p-1.5 hover:bg-bg-elevated rounded-md transition-colors text-text-muted hover:text-accent"
-            title="新建会话"
+            title={t('sessions.create')}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -102,7 +104,7 @@ export default function Sidebar() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="搜索会话..."
+            placeholder={t('sessions.search')}
             className="w-full pl-8 pr-7 py-1.5 bg-bg-tertiary border border-border rounded-md text-xs text-text-primary placeholder:text-text-faint focus:outline-none focus:border-accent/50 transition-colors"
           />
           {searchQuery && (
@@ -122,13 +124,13 @@ export default function Sidebar() {
       <div className="flex-1 overflow-y-auto py-2">
         {filteredSessions.length === 0 ? (
           <div className="px-4 py-8 text-center text-text-faint text-sm">
-            <p>{searchQuery ? '未找到匹配的会话' : '暂无会话'}</p>
+            <p>{searchQuery ? t('sessions.noResults') : t('sessions.noSessions')}</p>
             {!searchQuery && (
               <button
                 onClick={createSession}
                 className="mt-3 px-3 py-1.5 bg-accent-muted/20 text-accent rounded-md text-xs hover:bg-accent-muted/30 transition-colors"
               >
-                创建第一个会话
+                {t('sessions.createFirst')}
               </button>
             )}
           </div>
@@ -168,7 +170,7 @@ export default function Sidebar() {
       {/* Footer */}
       <div className="p-3 border-t border-border">
         <div className="text-[11px] text-text-faint text-center">
-          共 {filteredSessions.length} 个会话{searchQuery && ` (筛选自 ${state.sessions.length})`}
+          {filteredSessions.length} {t('sessions.messages')} {searchQuery && `(${t('sessions.filtered')} ${state.sessions.length})`}
         </div>
       </div>
 

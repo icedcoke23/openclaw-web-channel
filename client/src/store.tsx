@@ -45,6 +45,16 @@ function applyTheme(theme: Theme) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Notifications                                                      */
+/* ------------------------------------------------------------------ */
+
+function getInitialNotificationsEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  const saved = localStorage.getItem('notificationsEnabled');
+  return saved === 'true';
+}
+
+/* ------------------------------------------------------------------ */
 /*  State                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -72,6 +82,7 @@ export interface AppState {
   toasts: ToastMessage[];
   pendingRuns: ChatRun[];
   theme: Theme;
+  notificationsEnabled: boolean;
 }
 
 export const initialState: AppState = {
@@ -98,6 +109,7 @@ export const initialState: AppState = {
   toasts: [],
   pendingRuns: [],
   theme: 'system',
+  notificationsEnabled: false,
 };
 
 /* ------------------------------------------------------------------ */
@@ -144,7 +156,8 @@ export type AppAction =
   | { type: 'ADD_PENDING_RUN'; payload: ChatRun }
   | { type: 'REMOVE_PENDING_RUN'; payload: string }
   | { type: 'CLEAR_PENDING_RUNS' }
-  | { type: 'SET_THEME'; payload: Theme };
+  | { type: 'SET_THEME'; payload: Theme }
+  | { type: 'SET_NOTIFICATIONS_ENABLED'; payload: boolean };
 
 /* ------------------------------------------------------------------ */
 /*  Reducer                                                            */
@@ -316,6 +329,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'SET_THEME':
       return { ...state, theme: action.payload };
 
+    case 'SET_NOTIFICATIONS_ENABLED':
+      return { ...state, notificationsEnabled: action.payload };
+
     default:
       return state;
   }
@@ -332,6 +348,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, {
     ...initialState,
     theme: getInitialTheme(),
+    notificationsEnabled: getInitialNotificationsEnabled(),
   });
 
   // Apply theme on mount and when theme changes
@@ -349,6 +366,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     mediaQuery.addEventListener('change', handleChange);
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, [state.theme]);
+
+  // Persist notifications setting
+  useEffect(() => {
+    localStorage.setItem('notificationsEnabled', String(state.notificationsEnabled));
+  }, [state.notificationsEnabled]);
 
   return (
     <AppStateContext.Provider value={state}>

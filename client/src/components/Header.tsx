@@ -1,27 +1,30 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppState, useAppDispatch } from '@/store';
 import ThemeToggle from './ThemeToggle';
+import LanguageSwitcher from './LanguageSwitcher';
 import type { PanelType } from '@/types';
 
-const PANEL_TABS: { key: PanelType; label: string; icon: string }[] = [
-  { key: 'chat', label: '对话', icon: '💬' },
-  { key: 'dashboard', label: '仪表盘', icon: '📊' },
-  { key: 'sessions', label: '会话', icon: '📁' },
-  { key: 'cron', label: '定时任务', icon: '⏰' },
-  { key: 'config', label: '配置', icon: '⚙️' },
-  { key: 'logs', label: '日志', icon: '📋' },
-  { key: 'skills', label: '技能', icon: '🧩' },
-  { key: 'nodes', label: '节点', icon: '🔌' },
-];
-
 export default function Header() {
+  const { t } = useTranslation();
   const state = useAppState();
   const dispatch = useAppDispatch();
 
+  const PANEL_TABS: { key: PanelType; icon: string }[] = [
+    { key: 'chat', icon: '💬' },
+    { key: 'dashboard', icon: '📊' },
+    { key: 'sessions', icon: '📁' },
+    { key: 'cron', icon: '⏰' },
+    { key: 'config', icon: '⚙️' },
+    { key: 'logs', icon: '📋' },
+    { key: 'skills', icon: '🧩' },
+    { key: 'nodes', icon: '🔌' },
+  ];
+
   const statusConfig = {
-    connected: { label: '已连接', color: 'bg-success', dotColor: 'bg-success' },
-    connecting: { label: '连接中', color: 'bg-warning', dotColor: 'bg-warning' },
-    disconnected: { label: '已断开', color: 'bg-danger', dotColor: 'bg-danger' },
+    connected: { label: t('dashboard.connected'), color: 'bg-success', dotColor: 'bg-success' },
+    connecting: { label: t('dashboard.connecting'), color: 'bg-warning', dotColor: 'bg-warning' },
+    disconnected: { label: t('dashboard.disconnected'), color: 'bg-danger', dotColor: 'bg-danger' },
   };
 
   const status = statusConfig[state.connectionStatus];
@@ -33,7 +36,7 @@ export default function Header() {
         <button
           className="lg:hidden p-1.5 hover:bg-bg-elevated rounded-md transition-colors"
           onClick={() => dispatch({ type: 'TOGGLE_SIDEBAR' })}
-          aria-label="切换侧边栏"
+          aria-label={t('common.close')}
         >
           <svg className="w-5 h-5 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -46,7 +49,7 @@ export default function Header() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <span className="font-semibold text-text-primary text-sm hidden sm:block">OpenClaw</span>
+          <span className="font-semibold text-text-primary text-sm hidden sm:block">{t('common.appName')}</span>
         </div>
 
         {/* Connection status pill */}
@@ -69,13 +72,14 @@ export default function Header() {
             }`}
           >
             <span className="mr-1.5">{tab.icon}</span>
-            {tab.label}
+            {t(`nav.${tab.key}`)}
           </button>
         ))}
       </nav>
 
-      {/* Right: Session badge + Command palette trigger + Theme toggle */}
+      {/* Right: Session badge + Command palette trigger + Theme toggle + Language switcher */}
       <div className="flex items-center gap-2">
+        <LanguageSwitcher />
         <ThemeToggle />
 
         {state.activeSessionId && (
@@ -83,19 +87,19 @@ export default function Header() {
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
-            <span>{state.messages.length} 条消息</span>
+            <span>{state.messages.length} {t('sessions.messages')}</span>
           </div>
         )}
 
         <button
           onClick={() => dispatch({ type: 'TOGGLE_COMMAND_PALETTE' })}
           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-bg-elevated text-xs text-text-muted hover:text-text-secondary hover:bg-border transition-colors"
-          title="命令面板 (Ctrl+/)"
+          title={`${t('commandPalette.title')} (${t('commandPalette.shortcut')})`}
         >
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
-          <kbd className="hidden sm:inline text-[10px] px-1 py-0.5 rounded bg-bg-secondary border border-border font-mono">Ctrl+/</kbd>
+          <kbd className="hidden sm:inline text-[10px] px-1 py-0.5 rounded bg-bg-secondary border border-border font-mono">{t('commandPalette.shortcut')}</kbd>
         </button>
       </div>
     </header>
