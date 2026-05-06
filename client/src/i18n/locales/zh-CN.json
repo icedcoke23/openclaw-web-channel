@@ -24,6 +24,7 @@
   "nav": {
     "chat": "对话",
     "dashboard": "仪表盘",
+    "discovery": "发现",
     "sessions": "会话",
     "cron": "定时任务",
     "config": "配置",

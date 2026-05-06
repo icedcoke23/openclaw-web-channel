@@ -6,6 +6,7 @@ export type ShortcutAction =
   | 'goChat'
   | 'goSessions'
   | 'goDashboard'
+  | 'goDiscovery'
   | 'goLogs'
   | 'goSkills'
   | 'goNodes'
@@ -30,6 +31,7 @@ export const SHORTCUTS: Shortcut[] = [
   { action: 'goChat', description: '跳转到聊天', category: 'navigation', keys: ['g', 'c'] },
   { action: 'goSessions', description: '跳转到会话', category: 'navigation', keys: ['g', 's'] },
   { action: 'goDashboard', description: '跳转到仪表盘', category: 'navigation', keys: ['g', 'd'] },
+  { action: 'goDiscovery', description: '跳转到发现', category: 'navigation', keys: ['g', 'v'] },
   { action: 'goLogs', description: '跳转到日志', category: 'navigation', keys: ['g', 'l'] },
   { action: 'goSkills', description: '跳转到技能', category: 'navigation', keys: ['g', 'k'] },
   { action: 'goNodes', description: '跳转到节点', category: 'navigation', keys: ['g', 'n'] },
@@ -133,6 +135,7 @@ export function useKeyboardShortcuts({ onAction, enabled = true }: UseKeyboardSh
             c: 'goChat',
             s: 'goSessions',
             d: 'goDashboard',
+            v: 'goDiscovery',
             l: 'goLogs',
             k: 'goSkills',
             n: 'goNodes',
@@ -179,6 +182,7 @@ export function getPanelFromAction(action: ShortcutAction): PanelType | null {
     goChat: 'chat',
     goSessions: 'sessions',
     goDashboard: 'dashboard',
+    goDiscovery: 'discovery',
     goLogs: 'logs',
     goSkills: 'skills',
     goNodes: 'nodes',

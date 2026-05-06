@@ -52,6 +52,51 @@ function loadConfig() {
   };
 }
 
+// ─── In-Memory Data Stores ────────────────────────────────────────────────────
+// Device management and discovery stores (will be lost on restart)
+
+const devicesStore = new Map();
+const discoveredGatewaysStore = new Map();
+let discoveryScanning = false;
+let lastDiscoveryScan = null;
+
+// Initialize with some mock data for testing
+function initMockData() {
+  // Mock devices
+  devicesStore.set('dev-001', {
+    id: 'dev-001',
+    name: 'iPhone 15 Pro',
+    type: 'mobile',
+    status: 'approved',
+    pairedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+    lastSeen: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+    ipAddress: '192.168.1.101',
+    token: crypto.randomBytes(32).toString('hex'),
+  });
+  devicesStore.set('dev-002', {
+    id: 'dev-002',
+    name: 'MacBook Pro',
+    type: 'desktop',
+    status: 'approved',
+    pairedAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+    lastSeen: new Date().toISOString(),
+    ipAddress: '192.168.1.102',
+    token: crypto.randomBytes(32).toString('hex'),
+  });
+  devicesStore.set('dev-003', {
+    id: 'dev-003',
+    name: 'iPad Air',
+    type: 'mobile',
+    status: 'pending',
+    pairedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    lastSeen: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+    ipAddress: '192.168.1.103',
+    token: crypto.randomBytes(32).toString('hex'),
+  });
+}
+
+initMockData();
+
 const CONFIG = loadConfig();
 
 // ─── Logging ──────────────────────────────────────────────────────────────────
@@ -1440,6 +1485,174 @@ app.post('/api/nodes/:id/action', async (req, res) => {
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
+});
+
+// ── Device Management ─────────────────────────────────────────────────────────
+
+// List paired devices
+app.get('/api/nodes/devices', (_req, res) => {
+  const devices = Array.from(devicesStore.values()).map(({ token, ...device }) => device);
+  res.json({ devices });
+});
+
+// Approve device pairing
+app.post('/api/nodes/devices/:id/approve', (req, res) => {
+  const device = devicesStore.get(req.params.id);
+  if (!device) {
+    return res.status(404).json({ error: 'Device not found' });
+  }
+  device.status = 'approved';
+  device.lastSeen = new Date().toISOString();
+  const { token, ...responseDevice } = device;
+  res.json({ success: true, device: responseDevice });
+});
+
+// Revoke device token
+app.post('/api/nodes/devices/:id/revoke', (req, res) => {
+  const device = devicesStore.get(req.params.id);
+  if (!device) {
+    return res.status(404).json({ error: 'Device not found' });
+  }
+  device.status = 'revoked';
+  device.lastSeen = new Date().toISOString();
+  res.json({ success: true });
+});
+
+// Rotate device token
+app.post('/api/nodes/devices/:id/rotate', (req, res) => {
+  const device = devicesStore.get(req.params.id);
+  if (!device) {
+    return res.status(404).json({ error: 'Device not found' });
+  }
+  device.token = crypto.randomBytes(32).toString('hex');
+  device.lastSeen = new Date().toISOString();
+  const { token, ...responseDevice } = device;
+  res.json({ success: true, device: responseDevice });
+});
+
+// ── Gateway Discovery ─────────────────────────────────────────────────────────
+
+// Mock mDNS discovery - scan for gateways
+async function performDiscovery() {
+  discoveryScanning = true;
+  lastDiscoveryScan = new Date().toISOString();
+  
+  // Simulate discovery delay
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
+  // Add some mock discovered gateways
+  const mockGateways = [
+    {
+      id: 'gw-local-001',
+      name: 'OpenClaw Gateway (Local)',
+      url: 'ws://localhost:18789',
+      version: '3.2.1',
+      lastSeen: new Date().toISOString(),
+      rssi: -45,
+    },
+    {
+      id: 'gw-dev-001',
+      name: 'Dev Gateway',
+      url: 'ws://192.168.1.50:18789',
+      version: '3.1.0',
+      lastSeen: new Date().toISOString(),
+      rssi: -62,
+    },
+    {
+      id: 'gw-test-001',
+      name: 'Test Environment',
+      url: 'ws://10.0.0.100:18789',
+      version: '3.0.5',
+      lastSeen: new Date().toISOString(),
+      rssi: -78,
+    },
+  ];
+  
+  mockGateways.forEach(gw => {
+    discoveredGatewaysStore.set(gw.id, gw);
+  });
+  
+  discoveryScanning = false;
+}
+
+// Get discovery status and found gateways
+app.get('/api/discovery', (req, res) => {
+  const found = Array.from(discoveredGatewaysStore.values());
+  res.json({
+    scanning: discoveryScanning,
+    found,
+    lastScan: lastDiscoveryScan,
+  });
+});
+
+// Refresh discovery scan
+app.post('/api/discovery/refresh', async (req, res) => {
+  if (discoveryScanning) {
+    return res.json({ success: true, message: 'Scan already in progress' });
+  }
+  
+  // Start scan in background
+  performDiscovery().catch(() => {});
+  
+  res.json({ success: true, message: 'Discovery scan started' });
+});
+
+// Connect to discovered gateway
+app.post('/api/discovery/connect', async (req, res) => {
+  const { url, token } = req.body;
+  if (!url) {
+    return res.status(400).json({ error: 'url is required' });
+  }
+  
+  // In a real implementation, this would update the gateway connection
+  // For now, just validate the URL format
+  try {
+    new URL(url);
+    res.json({ 
+      success: true, 
+      message: 'Gateway connection updated',
+      gateway: { url, token: token ? '***' : undefined }
+    });
+  } catch {
+    res.status(400).json({ error: 'Invalid URL format' });
+  }
+});
+
+// ── Canvas ────────────────────────────────────────────────────────────────────
+
+// Canvas data store per session
+const canvasStore = new Map();
+
+// Get canvas data for a session
+app.get('/api/canvas/:sessionId', (req, res) => {
+  const { sessionId } = req.params;
+  const canvasData = canvasStore.get(sessionId) || {
+    elements: [],
+    background: '#ffffff',
+    width: 800,
+    height: 600,
+  };
+  res.json({ canvasData });
+});
+
+// Update canvas data for a session
+app.post('/api/canvas/:sessionId', (req, res) => {
+  const { sessionId } = req.params;
+  const { canvasData } = req.body;
+  
+  if (!canvasData) {
+    return res.status(400).json({ error: 'canvasData is required' });
+  }
+  
+  canvasStore.set(sessionId, canvasData);
+  res.json({ success: true, canvasData });
+});
+
+// Clear canvas for a session
+app.delete('/api/canvas/:sessionId', (req, res) => {
+  const { sessionId } = req.params;
+  canvasStore.delete(sessionId);
+  res.json({ success: true });
 });
 
 // ── Dashboard (aggregate) ─────────────────────────────────────────────────────

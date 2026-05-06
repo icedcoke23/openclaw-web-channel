@@ -15,6 +15,7 @@ import LogsPanel from '@/components/logs/LogsPanel';
 import SkillsPanel from '@/components/skills/SkillsPanel';
 import NodesPanel from '@/components/nodes/NodesPanel';
 import CronPanel from '@/components/cron/CronPanel';
+import DiscoveryPanel from '@/components/discovery/DiscoveryPanel';
 import { useKeyboardShortcuts, getPanelFromAction, type ShortcutAction } from '@/hooks/useKeyboardShortcuts';
 import type { PanelType } from '@/types';
 
@@ -38,6 +39,8 @@ function PanelRouter() {
       return <NodesPanel />;
     case 'cron':
       return <CronPanel />;
+    case 'discovery':
+      return <DiscoveryPanel />;
     default:
       return <ChatPanel />;
   }

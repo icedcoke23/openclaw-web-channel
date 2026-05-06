@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useMemo, useState } from 'react';
 import type { Message } from '@/types';
 import { renderMarkdown, enhanceCodeBlocks, copyToClipboard } from '@/lib/markdown';
 import Lightbox from '@/components/Lightbox';
+import { CanvasMessageRenderer } from './CanvasRenderer';
 
 interface MessageBubbleProps {
   message: Message;
@@ -130,11 +131,15 @@ export default function MessageBubble({ message, onCopy, onRegenerate }: Message
             {message.content}
           </div>
         ) : (
-          <div
-            ref={contentRef}
-            className="markdown-body text-sm text-text-secondary"
-            dangerouslySetInnerHTML={{ __html: renderedContent }}
-          />
+          <>
+            {/* Canvas rendering */}
+            <CanvasMessageRenderer content={message.content} />
+            <div
+              ref={contentRef}
+              className="markdown-body text-sm text-text-secondary"
+              dangerouslySetInnerHTML={{ __html: renderedContent }}
+            />
+          </>
         )}
 
         {/* Attachments */}

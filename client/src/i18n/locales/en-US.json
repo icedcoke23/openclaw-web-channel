@@ -24,6 +24,7 @@
   "nav": {
     "chat": "Chat",
     "dashboard": "Dashboard",
+    "discovery": "Discovery",
     "sessions": "Sessions",
     "cron": "Cron Jobs",
     "config": "Config",

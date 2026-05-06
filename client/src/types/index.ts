@@ -1,6 +1,6 @@
 export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected';
 
-export type PanelType = 'chat' | 'dashboard' | 'sessions' | 'config' | 'logs' | 'skills' | 'nodes' | 'cron';
+export type PanelType = 'chat' | 'dashboard' | 'sessions' | 'config' | 'logs' | 'skills' | 'nodes' | 'cron' | 'discovery';
 
 export interface Session {
   id: string;
@@ -165,4 +165,57 @@ export interface ModelOption {
   id: string;
   name: string;
   description?: string;
+}
+
+// Device Management Types
+export type DeviceType = 'mobile' | 'desktop' | 'web';
+export type DeviceStatus = 'pending' | 'approved' | 'revoked';
+
+export interface Device {
+  id: string;
+  name: string;
+  type: DeviceType;
+  status: DeviceStatus;
+  pairedAt: string;
+  lastSeen: string;
+  ipAddress: string;
+}
+
+// Gateway Discovery Types
+export interface DiscoveredGateway {
+  id: string;
+  name: string;
+  url: string;
+  version?: string;
+  lastSeen: string;
+  rssi?: number;
+}
+
+export interface DiscoveryStatus {
+  scanning: boolean;
+  found: DiscoveredGateway[];
+  lastScan: string | null;
+}
+
+// Canvas Types
+export interface CanvasElement {
+  id: string;
+  type: 'rectangle' | 'circle' | 'line' | 'text' | 'image' | 'path';
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+  content?: string;
+  src?: string;
+  points?: Array<{ x: number; y: number }>;
+}
+
+export interface CanvasData {
+  elements: CanvasElement[];
+  background: string;
+  width: number;
+  height: number;
 }

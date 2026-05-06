@@ -13,6 +13,7 @@ export default function Header() {
   const PANEL_TABS: { key: PanelType; icon: string }[] = [
     { key: 'chat', icon: '💬' },
     { key: 'dashboard', icon: '📊' },
+    { key: 'discovery', icon: '🔍' },
     { key: 'sessions', icon: '📁' },
     { key: 'cron', icon: '⏰' },
     { key: 'config', icon: '⚙️' },

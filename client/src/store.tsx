@@ -16,6 +16,9 @@ import type {
   ToastMessage,
   ChatRun,
   ModelOption,
+  Device,
+  DiscoveredGateway,
+  DiscoveryStatus,
 } from '@/types';
 
 /* ------------------------------------------------------------------ */
@@ -77,6 +80,8 @@ export interface AppState {
   logs: LogEntry[];
   skills: Skill[];
   nodes: Node[];
+  devices: Device[];
+  discovery: DiscoveryStatus;
   config: ConfigEntry[];
   configSchema: ConfigSchema[];
   toasts: ToastMessage[];
@@ -104,6 +109,12 @@ export const initialState: AppState = {
   logs: [],
   skills: [],
   nodes: [],
+  devices: [],
+  discovery: {
+    scanning: false,
+    found: [],
+    lastScan: null,
+  },
   config: [],
   configSchema: [],
   toasts: [],
@@ -149,6 +160,9 @@ export type AppAction =
   | { type: 'UPDATE_SKILL'; payload: Skill }
   | { type: 'SET_NODES'; payload: Node[] }
   | { type: 'UPDATE_NODE'; payload: Node }
+  | { type: 'SET_DEVICES'; payload: Device[] }
+  | { type: 'UPDATE_DEVICE'; payload: Device }
+  | { type: 'SET_DISCOVERY'; payload: DiscoveryStatus }
   | { type: 'SET_CONFIG'; payload: ConfigEntry[] }
   | { type: 'SET_CONFIG_SCHEMA'; payload: ConfigSchema[] }
   | { type: 'ADD_TOAST'; payload: ToastMessage }
@@ -301,6 +315,20 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           n.id === action.payload.id ? action.payload : n
         ),
       };
+
+    case 'SET_DEVICES':
+      return { ...state, devices: action.payload };
+
+    case 'UPDATE_DEVICE':
+      return {
+        ...state,
+        devices: state.devices.map((d) =>
+          d.id === action.payload.id ? action.payload : d
+        ),
+      };
+
+    case 'SET_DISCOVERY':
+      return { ...state, discovery: action.payload };
 
     case 'SET_CONFIG':
       return { ...state, config: action.payload };

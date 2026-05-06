@@ -3,6 +3,7 @@ import { useAppState, useAppDispatch } from '@/store';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useApi } from '@/hooks/useApi';
 import { formatTime } from '@/lib/markdown';
+import DevicesPanel from './DevicesPanel';
 import type { Node } from '@/types';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: string; dotColor: string }> = {
@@ -11,7 +12,9 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: str
   error: { label: '错误', color: 'text-danger', bgColor: 'bg-danger/10', dotColor: 'bg-danger' },
 };
 
-export default function NodesPanel() {
+type TabType = 'nodes' | 'devices';
+
+function NodesList() {
   const state = useAppState();
   const dispatch = useAppDispatch();
   const { rpc } = useWebSocket();
@@ -74,7 +77,7 @@ export default function NodesPanel() {
   }
 
   return (
-    <div className="p-4 lg:p-6 max-w-5xl mx-auto space-y-4 overflow-y-auto h-full">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-text-primary">节点管理</h1>
@@ -214,6 +217,51 @@ export default function NodesPanel() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+export default function NodesPanel() {
+  const [activeTab, setActiveTab] = useState<TabType>('nodes');
+
+  return (
+    <div className="p-4 lg:p-6 max-w-5xl mx-auto h-full flex flex-col">
+      {/* Tabs */}
+      <div className="flex items-center gap-1 mb-4 border-b border-border">
+        <button
+          onClick={() => setActiveTab('nodes')}
+          className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+            activeTab === 'nodes'
+              ? 'text-accent border-accent'
+              : 'text-text-muted border-transparent hover:text-text-secondary'
+          }`}
+        >
+          节点
+        </button>
+        <button
+          onClick={() => setActiveTab('devices')}
+          className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+            activeTab === 'devices'
+              ? 'text-accent border-accent'
+              : 'text-text-muted border-transparent hover:text-text-secondary'
+          }`}
+        >
+          设备
+        </button>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-hidden">
+        {activeTab === 'nodes' ? (
+          <div className="h-full overflow-y-auto">
+            <NodesList />
+          </div>
+        ) : (
+          <div className="h-full overflow-y-auto">
+            <DevicesPanel />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
