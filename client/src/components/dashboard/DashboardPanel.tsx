@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAppState, useAppDispatch } from '@/store';
-import { useWebSocket } from '@/hooks/useWebSocket';
 import { useApi } from '@/hooks/useApi';
 import { formatTime } from '@/lib/markdown';
 import type { Channel, CronJob, ActivityItem } from '@/types';
@@ -34,18 +33,16 @@ function StatCard({
 export default function DashboardPanel() {
   const state = useAppState();
   const dispatch = useAppDispatch();
-  const { rpc } = useWebSocket();
   const { addToast } = useApi();
   const [loading, setLoading] = useState(true);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     try {
-      const [statusRes, channelsRes, cronRes, activityRes] = await Promise.allSettled([
-        rpc('gateway.status'),
-        rpc('channels.list'),
-        rpc('cron.list'),
-        rpc('activity.list'),
+      const [statusRes, channelsRes, cronRes] = await Promise.allSettled([
+        fetch('/api/status').then((r) => r.json()),
+        fetch('/api/channels').then((r) => r.json()),
+        fetch('/api/cron').then((r) => r.json()),
       ]);
 
       if (statusRes.status === 'fulfilled' && statusRes.value) {
@@ -72,22 +69,20 @@ export default function DashboardPanel() {
       }
 
       if (channelsRes.status === 'fulfilled' && channelsRes.value) {
-        dispatch({ type: 'SET_CHANNELS', payload: (channelsRes.value as Channel[]) || [] });
+        const channelsData = Array.isArray(channelsRes.value) ? channelsRes.value : [];
+        dispatch({ type: 'SET_CHANNELS', payload: (channelsData as Channel[]) || [] });
       }
 
       if (cronRes.status === 'fulfilled' && cronRes.value) {
-        dispatch({ type: 'SET_CRON_JOBS', payload: (cronRes.value as CronJob[]) || [] });
-      }
-
-      if (activityRes.status === 'fulfilled' && activityRes.value) {
-        dispatch({ type: 'SET_ACTIVITY_FEED', payload: (activityRes.value as ActivityItem[]) || [] });
+        const cronData = Array.isArray(cronRes.value) ? cronRes.value : [];
+        dispatch({ type: 'SET_CRON_JOBS', payload: (cronData as CronJob[]) || [] });
       }
     } catch {
       // Some endpoints may not exist
     } finally {
       setLoading(false);
     }
-  }, [rpc, dispatch, state.connectionStatus]);
+  }, [dispatch, state.connectionStatus]);
 
   useEffect(() => {
     loadDashboard();

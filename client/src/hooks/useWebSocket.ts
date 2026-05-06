@@ -14,7 +14,7 @@ export function useWebSocket() {
 
   const wsRef = useRef<WebSocket | null>(null);
   const rpcIdRef = useRef(0);
-  const pendingRpcRef = useRef<Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>>(new Map());
+  const pendingRpcRef = useRef<Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; fallback: (() => void) | null }>>(new Map());
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isConnectingRef = useRef(false);
@@ -67,21 +67,32 @@ export function useWebSocket() {
         const data = JSON.parse(event.data as string);
 
         if (data.jsonrpc === '2.0' && data.id !== undefined) {
-          // RPC response
+          // JSON-RPC 2.0 response
           const pending = pendingRpcRef.current.get(data.id);
           if (pending) {
             pendingRpcRef.current.delete(data.id);
             if (data.error) {
-              pending.reject(new Error(data.error.message || 'RPC Error'));
+              // Check if there's a fallback alias to try
+              if (pending.fallback) {
+                pending.fallback();
+              } else {
+                pending.reject(new Error(data.error.message || 'RPC Error'));
+              }
             } else {
               pending.resolve(data.result);
             }
           }
-        } else if (data.method) {
-          // RPC event / notification
+        } else if (data.jsonrpc === '2.0' && data.method) {
+          // JSON-RPC 2.0 notification (event from server)
           const listeners = eventListenersRef.current.get(data.method);
           if (listeners) {
             listeners.forEach((fn) => fn(data.params || {}));
+          }
+        } else if (data.type === 'event' && data.event) {
+          // Legacy format (backward compatibility)
+          const listeners = eventListenersRef.current.get(data.event);
+          if (listeners) {
+            listeners.forEach((fn) => fn(data.data || {}));
           }
         }
       } catch {
@@ -189,14 +200,20 @@ export function useWebSocket() {
             return;
           }
 
+          const currentMethod = aliases[idx];
           const req: RpcRequest = {
             jsonrpc: '2.0',
             id,
-            method: aliases[idx],
+            method: currentMethod,
             params,
           };
 
-          pendingRpcRef.current.set(id, { resolve, reject });
+          pendingRpcRef.current.set(id, {
+            resolve,
+            reject,
+            // On failure, try next alias
+            fallback: idx < aliases.length - 1 ? () => trySend(idx + 1) : null,
+          });
           ws.send(JSON.stringify(req));
         };
 

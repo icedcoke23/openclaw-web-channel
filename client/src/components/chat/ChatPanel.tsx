@@ -12,11 +12,24 @@ export default function ChatPanel() {
   const { rpc, subscribe, startStreamingTimer, stopStreamingTimer, clearAllStreamingTimers } = useWebSocket();
   const { addToast } = useApi();
 
+  // Load models on mount
+  useEffect(() => {
+    fetch('/api/models')
+      .then((res) => res.json())
+      .then((data) => {
+        const models = Array.isArray(data) ? data : data?.models || [];
+        const options = models.map((m: { id?: string; name?: string; model?: string }) => ({
+          id: m.id || m.model || m.name || '',
+          name: m.name || m.id || m.model || '',
+        }));
+        dispatch({ type: 'SET_MODELS', payload: options });
+      })
+      .catch(() => {});
+  }, [dispatch]);
+
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [showModelSelector, setShowModelSelector] = useState(false);
-  const [abortController, setAbortController] = useState<AbortController | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -191,8 +204,10 @@ export default function ChatPanel() {
         payload: { id: lastAssistant.id, content: lastAssistant.content, isStreaming: false },
       });
     }
+    // Actually abort the chat run on the gateway
+    rpc('chat.abort', {}).catch(() => {});
     addToast('info', '已停止生成');
-  }, [state.messages, dispatch, clearAllStreamingTimers, addToast]);
+  }, [state.messages, dispatch, clearAllStreamingTimers, rpc, addToast]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -224,20 +239,31 @@ export default function ChatPanel() {
   );
 
   // File handling
-  const processFiles = (files: FileList | File[]) => {
+  const processFiles = async (files: FileList | File[]) => {
     const newAttachments: Attachment[] = [];
-    Array.from(files).forEach((file) => {
-      if (file.size > 10 * 1024 * 1024) {
-        addToast('warning', '文件过大', `${file.name} 超过 10MB 限制`);
-        return;
+    for (const file of Array.from(files)) {
+      try {
+        if (file.size > 10 * 1024 * 1024) {
+          addToast('warning', '文件过大', `${file.name} 超过 10MB 限制`);
+          continue;
+        }
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch('/api/upload', { method: 'POST', body: formData });
+        if (res.ok) {
+          const data = await res.json();
+          newAttachments.push({
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            url: data.url || data.path,
+          });
+        }
+      } catch (err) {
+        console.error('File upload failed:', err);
       }
-      newAttachments.push({
-        name: file.name,
-        type: file.type,
-        size: file.size,
-      });
-    });
-    setAttachments((prev) => [...prev, ...newAttachments]);
+    }
+    setAttachments(prev => [...prev, ...newAttachments]);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -356,6 +382,23 @@ export default function ChatPanel() {
 
         {/* Input area */}
         <div className="flex items-end gap-2 p-3">
+          {/* Model selector */}
+          {state.models.length > 0 && (
+            <select
+              value={state.selectedModel}
+              onChange={(e) => dispatch({ type: 'SET_SELECTED_MODEL', payload: e.target.value })}
+              className="px-2 py-2 rounded-lg bg-bg-tertiary border border-border text-xs text-text-primary outline-none focus:border-accent/50 transition-colors shrink-0 max-w-[120px]"
+              title="选择模型"
+            >
+              <option value="">默认模型</option>
+              {state.models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          )}
+
           {/* File upload */}
           <button
             onClick={() => fileInputRef.current?.click()}

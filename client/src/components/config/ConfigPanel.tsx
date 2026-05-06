@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useAppState, useAppDispatch } from '@/store';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useApi } from '@/hooks/useApi';
+import Modal from '@/components/Modal';
 import type { ConfigEntry, ConfigSchema } from '@/types';
 
 export default function ConfigPanel() {
@@ -15,7 +16,6 @@ export default function ConfigPanel() {
   const [activeTab, setActiveTab] = useState<'form' | 'json'>('form');
   const [injectMessage, setInjectMessage] = useState('');
   const [showInject, setShowInject] = useState(false);
-  const [diffView, setDiffView] = useState(false);
 
   const loadConfig = useCallback(async () => {
     setLoading(true);
@@ -280,39 +280,33 @@ export default function ConfigPanel() {
       )}
 
       {/* Inject message modal */}
-      {showInject && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowInject(false)} />
-          <div className="relative w-full max-w-md bg-bg-secondary border border-border rounded-xl shadow-2xl animate-slide-up p-5">
-            <h3 className="text-base font-semibold text-text-primary mb-3">注入系统消息</h3>
-            <p className="text-xs text-text-muted mb-3">
-              此消息将作为系统消息注入到当前会话上下文中
-            </p>
-            <textarea
-              value={injectMessage}
-              onChange={(e) => setInjectMessage(e.target.value)}
-              rows={5}
-              placeholder="输入系统消息内容..."
-              className="w-full px-3 py-2 rounded-lg bg-bg-tertiary border border-border text-sm text-text-primary outline-none focus:border-accent/50 transition-colors resize-y mb-3"
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setShowInject(false)}
-                className="px-3 py-1.5 rounded-lg bg-bg-elevated text-xs text-text-muted hover:text-text-secondary transition-colors"
-              >
-                取消
-              </button>
-              <button
-                onClick={injectSystemMessage}
-                disabled={!injectMessage.trim()}
-                className="px-3 py-1.5 rounded-lg bg-accent-muted/20 text-xs text-accent hover:bg-accent-muted/30 transition-colors disabled:opacity-40"
-              >
-                注入
-              </button>
-            </div>
-          </div>
+      <Modal open={showInject} onClose={() => setShowInject(false)} title="注入系统消息" maxWidth="max-w-md">
+        <p className="text-xs text-text-muted mb-3">
+          此消息将作为系统消息注入到当前会话上下文中
+        </p>
+        <textarea
+          value={injectMessage}
+          onChange={(e) => setInjectMessage(e.target.value)}
+          rows={5}
+          placeholder="输入系统消息内容..."
+          className="w-full px-3 py-2 rounded-lg bg-bg-tertiary border border-border text-sm text-text-primary outline-none focus:border-accent/50 transition-colors resize-y mb-3"
+        />
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={() => setShowInject(false)}
+            className="px-3 py-1.5 rounded-lg bg-bg-elevated text-xs text-text-muted hover:text-text-secondary transition-colors"
+          >
+            取消
+          </button>
+          <button
+            onClick={injectSystemMessage}
+            disabled={!injectMessage.trim()}
+            className="px-3 py-1.5 rounded-lg bg-accent-muted/20 text-xs text-accent hover:bg-accent-muted/30 transition-colors disabled:opacity-40"
+          >
+            注入
+          </button>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAppState, useAppDispatch } from '@/store';
-import { useWebSocket } from '@/hooks/useWebSocket';
 import { useApi } from '@/hooks/useApi';
 import Modal from '@/components/Modal';
 import { formatTime } from '@/lib/markdown';
@@ -9,7 +8,6 @@ import type { Session } from '@/types';
 export default function SessionsPanel() {
   const state = useAppState();
   const dispatch = useAppDispatch();
-  const { rpc } = useWebSocket();
   const { addToast } = useApi();
 
   const [loading, setLoading] = useState(true);
@@ -20,14 +18,15 @@ export default function SessionsPanel() {
   const loadSessions = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await rpc('sessions.list');
-      dispatch({ type: 'SET_SESSIONS', payload: (result as Session[]) || [] });
+      const res = await fetch('/api/sessions');
+      const result = await res.json();
+      dispatch({ type: 'SET_SESSIONS', payload: (Array.isArray(result) ? result : []) as Session[] });
     } catch {
       addToast('error', '加载会话列表失败');
     } finally {
       setLoading(false);
     }
-  }, [rpc, dispatch, addToast]);
+  }, [dispatch, addToast]);
 
   useEffect(() => {
     loadSessions();
@@ -35,10 +34,12 @@ export default function SessionsPanel() {
 
   const createSession = useCallback(async () => {
     try {
-      const result = await rpc('sessions.create', {
-        title: `会话 ${new Date().toLocaleString('zh-CN')}`,
+      const res = await fetch('/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: `会话 ${new Date().toLocaleString('zh-CN')}` }),
       });
-      const session = result as Session;
+      const session = await res.json() as Session;
       if (session) {
         dispatch({ type: 'ADD_SESSION', payload: session });
         addToast('success', '会话已创建');
@@ -46,7 +47,7 @@ export default function SessionsPanel() {
     } catch {
       addToast('error', '创建会话失败');
     }
-  }, [rpc, dispatch, addToast]);
+  }, [dispatch, addToast]);
 
   const switchToSession = useCallback(
     (id: string) => {
@@ -60,40 +61,40 @@ export default function SessionsPanel() {
     async (id: string) => {
       if (!confirm('确定要重置此会话吗？所有消息将被清除。')) return;
       try {
-        await rpc('sessions.reset', { sessionId: id });
+        await fetch(`/api/sessions/${id}/reset`, { method: 'POST' });
         addToast('success', '会话已重置');
         loadSessions();
       } catch {
         addToast('error', '重置会话失败');
       }
     },
-    [rpc, addToast, loadSessions]
+    [addToast, loadSessions]
   );
 
   const compactSession = useCallback(
     async (id: string) => {
       try {
-        await rpc('sessions.compact', { sessionId: id });
+        await fetch(`/api/sessions/${id}/compact`, { method: 'POST' });
         addToast('success', '会话已压缩');
       } catch {
         addToast('error', '压缩会话失败');
       }
     },
-    [rpc, addToast]
+    [addToast]
   );
 
   const deleteSession = useCallback(
     async (id: string) => {
       if (!confirm('确定要删除此会话吗？此操作不可撤销。')) return;
       try {
-        await rpc('sessions.delete', { sessionId: id });
+        await fetch(`/api/sessions/${id}`, { method: 'DELETE' });
         dispatch({ type: 'REMOVE_SESSION', payload: id });
         addToast('success', '会话已删除');
       } catch {
         addToast('error', '删除会话失败');
       }
     },
-    [rpc, dispatch, addToast]
+    [dispatch, addToast]
   );
 
   const viewTranscript = useCallback(
@@ -101,13 +102,14 @@ export default function SessionsPanel() {
       setSelectedSession(session);
       setShowTranscript(true);
       try {
-        const result = await rpc('sessions.transcript', { sessionId: session.id });
+        const res = await fetch(`/api/sessions/${session.id}/transcript`);
+        const result = await res.json();
         setTranscript(typeof result === 'string' ? result : JSON.stringify(result, null, 2));
       } catch {
         setTranscript('无法加载对话记录');
       }
     },
-    [rpc]
+    []
   );
 
   if (loading) {

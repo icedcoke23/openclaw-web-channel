@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { useAppState, useAppDispatch } from '@/store';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useApi } from '@/hooks/useApi';
@@ -20,6 +20,10 @@ export default function Sidebar() {
       addToast('error', '加载会话失败');
     }
   }, [rpc, dispatch, addToast]);
+
+  useEffect(() => {
+    loadSessions();
+  }, [loadSessions]);
 
   const createSession = useCallback(async () => {
     try {

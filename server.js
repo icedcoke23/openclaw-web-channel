@@ -637,7 +637,9 @@ wss.on('connection', (ws, req) => {
 
   const unsubscribe = gateway.addEventListener((event, data) => {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'event', event, data }));
+      // Forward gateway events to browser client using JSON-RPC 2.0 notification format
+      const payload = JSON.stringify({ jsonrpc: '2.0', method: event, params: data });
+      ws.send(payload);
 
       // P0 Fix: Streaming timeout guard — track streaming state
       if (event === 'chat') {
@@ -670,11 +672,11 @@ wss.on('connection', (ws, req) => {
 
   browserClients.add(ws);
 
-  // Send current status immediately
+  // Send current status immediately using JSON-RPC 2.0 notification format
   ws.send(JSON.stringify({
-    type: 'event',
-    event: 'status',
-    data: { status: gateway.status, version: gateway.version },
+    jsonrpc: '2.0',
+    method: 'status',
+    params: { status: gateway.status, version: gateway.version },
   }));
 
   ws.on('message', async (raw) => {
@@ -692,7 +694,7 @@ wss.on('connection', (ws, req) => {
         }
 
         const result = await gateway.rpc(msg.method, msg.params || {});
-        ws.send(JSON.stringify({ type: 'response', id: msg.id, result }));
+        ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result }));
 
         // Clear pending state after non-streaming response
         if (msg.method === 'chat.send') {
@@ -702,7 +704,7 @@ wss.on('connection', (ws, req) => {
           }
         }
       } catch (err) {
-        ws.send(JSON.stringify({ type: 'response', id: msg.id, error: { message: err.message } }));
+        ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, error: { code: -32000, message: err.message } }));
         // Clear pending state on error
         if (msg.method === 'chat.send') {
           const state = clientStreamingState.get(ws);

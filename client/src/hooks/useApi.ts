@@ -23,9 +23,6 @@ export function useApi() {
     (type: ToastMessage['type'], title: string, message?: string) => {
       const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       dispatch({ type: 'ADD_TOAST', payload: { id, type, title, message, duration: 4000 } });
-      setTimeout(() => {
-        dispatch({ type: 'REMOVE_TOAST', payload: id });
-      }, 4000);
     },
     [dispatch]
   );

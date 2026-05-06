@@ -100,7 +100,7 @@ export default function SkillsPanel() {
           {categories.map((cat) => (
             <button
               key={cat}
-              onClick={() => setCategoryFilter(cat)}
+              onClick={() => setCategoryFilter(cat || 'all')}
               className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
                 categoryFilter === cat
                   ? 'bg-accent-muted/20 text-accent'

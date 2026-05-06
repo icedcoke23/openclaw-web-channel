@@ -1,22 +1,24 @@
-import { marked } from 'marked';
+import { Marked } from 'marked';
 import DOMPurify from 'dompurify';
 import hljs from 'highlight.js';
 
-// Configure marked
-marked.setOptions({
-  highlight(code: string, lang: string) {
-    if (lang && hljs.getLanguage(lang)) {
-      try {
-        return hljs.highlight(code, { language: lang }).value;
-      } catch {
-        // fall through
-      }
-    }
-    return hljs.highlightAuto(code).value;
-  },
-  breaks: true,
-  gfm: true,
-});
+// Custom renderer for marked v12 — override code block rendering with highlight.js
+const renderer = new Marked.Renderer();
+
+renderer.code = function({ text, lang }: { text: string; lang?: string }) {
+  const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext';
+  const highlighted = hljs.highlight(text, { language }).value;
+  const langLabel = lang || '';
+  return `<div class="code-block">
+    <div class="code-header">
+      <span class="code-lang">${langLabel}</span>
+      <button class="copy-btn" onclick="navigator.clipboard.writeText(this.closest('.code-block').querySelector('code').textContent)">复制</button>
+    </div>
+    <pre><code class="hljs language-${language}">${highlighted}</code></pre>
+  </div>`;
+};
+
+const markedInstance = new Marked({ renderer, breaks: true, gfm: true });
 
 /**
  * Render markdown to sanitized HTML.
@@ -24,10 +26,10 @@ marked.setOptions({
 export function renderMarkdown(content: string): string {
   if (!content) return '';
 
-  const rawHtml = marked.parse(content, { async: false }) as string;
+  const rawHtml = markedInstance.parse(content) as string;
   return DOMPurify.sanitize(rawHtml, {
-    ADD_TAGS: ['pre', 'code'],
-    ADD_ATTR: ['class', 'data-language'],
+    ALLOWED_TAGS: ['div', 'pre', 'code', 'span', 'p', 'br', 'strong', 'em', 'a', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'img', 'hr', 'button', 'input'],
+    ALLOWED_ATTR: ['class', 'href', 'target', 'rel', 'src', 'alt', 'onclick', 'type', 'checked', 'disabled'],
   });
 }
 

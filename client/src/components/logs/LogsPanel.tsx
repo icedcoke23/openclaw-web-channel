@@ -47,7 +47,7 @@ export default function LogsPanel() {
   useEffect(() => {
     const connectSSE = () => {
       try {
-        const es = new EventSource('/api/logs/stream');
+        const es = new EventSource('/api/logs');
         eventSourceRef.current = es;
 
         es.onopen = () => {
@@ -132,7 +132,6 @@ export default function LogsPanel() {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
-      fractionalSecondDigits: 3,
     });
 
   return (
