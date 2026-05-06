@@ -1,6 +1,6 @@
 export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected';
 
-export type PanelType = 'chat' | 'dashboard' | 'sessions' | 'config' | 'logs' | 'skills' | 'nodes';
+export type PanelType = 'chat' | 'dashboard' | 'sessions' | 'config' | 'logs' | 'skills' | 'nodes' | 'cron';
 
 export interface Session {
   id: string;
@@ -40,6 +40,13 @@ export interface ChatRun {
   startedAt: number;
 }
 
+export interface DiskUsage {
+  total: number;
+  used: number;
+  free: number;
+  usagePercent: number;
+}
+
 export interface GatewayStatus {
   status: ConnectionStatus;
   version?: string;
@@ -48,6 +55,7 @@ export interface GatewayStatus {
   sessions?: number;
   cpu?: number;
   memory?: number;
+  disk?: DiskUsage;
 }
 
 export interface Channel {
@@ -66,6 +74,7 @@ export interface CronJob {
   lastRun?: string;
   nextRun?: string;
   status: 'active' | 'paused' | 'error';
+  command?: string;
 }
 
 export interface ActivityItem {

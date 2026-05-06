@@ -2,23 +2,31 @@ import { Marked } from 'marked';
 import DOMPurify from 'dompurify';
 import hljs from 'highlight.js';
 
-// Custom renderer for marked v12 — override code block rendering with highlight.js
-const renderer = new Marked.Renderer();
+// Create marked instance with custom extensions
+const markedInstance = new Marked({ breaks: true, gfm: true });
 
-renderer.code = function({ text, lang }: { text: string; lang?: string }) {
-  const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext';
-  const highlighted = hljs.highlight(text, { language }).value;
-  const langLabel = lang || '';
-  return `<div class="code-block">
+// Custom tokenizer extension for code blocks with highlight.js
+markedInstance.use({
+  renderer: {
+    code({ text, lang }: { text: string; lang?: string }) {
+      const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext';
+      const highlighted = hljs.highlight(text, { language }).value;
+      const langLabel = lang || '';
+      return `<div class="code-block">
     <div class="code-header">
       <span class="code-lang">${langLabel}</span>
       <button class="copy-btn" onclick="navigator.clipboard.writeText(this.closest('.code-block').querySelector('code').textContent)">复制</button>
     </div>
     <pre><code class="hljs language-${language}">${highlighted}</code></pre>
   </div>`;
-};
-
-const markedInstance = new Marked({ renderer, breaks: true, gfm: true });
+    },
+    // Override image rendering to add lightbox support
+    image({ href, title, text }: { href: string; title?: string; text: string }) {
+      const alt = text || title || '';
+      return `<img src="${href}" alt="${alt}" title="${title || ''}" class="markdown-image cursor-pointer hover:opacity-90 transition-opacity" data-lightbox="true" />`;
+    },
+  },
+});
 
 /**
  * Render markdown to sanitized HTML.

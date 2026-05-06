@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useAppDispatch } from '@/store';
-import type { ToastMessage } from '@/types';
+import type { ToastMessage, CronJob } from '@/types';
 
 interface ApiOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
@@ -97,5 +97,53 @@ export function useApi() {
     [fetchApi]
   );
 
-  return { fetchApi, get, post, put, del, patch, addToast };
+  // Cron job operations
+  const createCronJob = useCallback(
+    async (job: Omit<CronJob, 'id'>) => {
+      const res = await post<{ success: boolean; job: CronJob }>('/cron', job);
+      if (res.ok && res.data) {
+        dispatch({ type: 'ADD_CRON_JOB', payload: res.data.job });
+        addToast('success', '创建成功', '定时任务已创建');
+      }
+      return res;
+    },
+    [post, dispatch, addToast]
+  );
+
+  const updateCronJob = useCallback(
+    async (id: string, updates: Partial<CronJob>) => {
+      const res = await patch<CronJob>(`/cron/${id}`, updates);
+      if (res.ok && res.data) {
+        dispatch({ type: 'UPDATE_CRON_JOB', payload: res.data });
+        addToast('success', '更新成功', '定时任务已更新');
+      }
+      return res;
+    },
+    [patch, dispatch, addToast]
+  );
+
+  const deleteCronJob = useCallback(
+    async (id: string) => {
+      const res = await del<{ success: boolean }>(`/cron/${id}`);
+      if (res.ok) {
+        dispatch({ type: 'DELETE_CRON_JOB', payload: id });
+        addToast('success', '删除成功', '定时任务已删除');
+      }
+      return res;
+    },
+    [del, dispatch, addToast]
+  );
+
+  const runCronJob = useCallback(
+    async (id: string) => {
+      const res = await post<{ success: boolean }>(`/cron/${id}/run`);
+      if (res.ok) {
+        addToast('success', '执行成功', '定时任务已触发执行');
+      }
+      return res;
+    },
+    [post, addToast]
+  );
+
+  return { fetchApi, get, post, put, del, patch, addToast, createCronJob, updateCronJob, deleteCronJob, runCronJob };
 }

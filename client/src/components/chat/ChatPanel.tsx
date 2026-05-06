@@ -3,6 +3,7 @@ import { useAppState, useAppDispatch } from '@/store';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useApi } from '@/hooks/useApi';
 import MessageBubble from './MessageBubble';
+import Lightbox from '@/components/Lightbox';
 import { generateId, formatTokens, formatFileSize } from '@/lib/markdown';
 import type { Message, Attachment, ChatRun } from '@/types';
 
@@ -30,6 +31,10 @@ export default function ChatPanel() {
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Lightbox state
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string }>({ src: '', alt: '' });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -285,6 +290,23 @@ export default function ChatPanel() {
     setAttachments((prev) => prev.filter((_, i) => i !== idx));
   };
 
+  // Image detection helper
+  const isImageFile = (filename: string): boolean => {
+    const ext = filename.split('.').pop()?.toLowerCase();
+    return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext || '');
+  };
+
+  // Open lightbox with image
+  const openLightbox = (src: string, alt: string) => {
+    setLightboxImage({ src, alt });
+    setLightboxOpen(true);
+  };
+
+  // Close lightbox
+  const closeLightbox = () => {
+    setLightboxOpen(false);
+  };
+
   // Calculate total tokens
   const totalInputTokens = state.messages.reduce((sum, m) => sum + (m.tokens?.input || 0), 0);
   const totalOutputTokens = state.messages.reduce((sum, m) => sum + (m.tokens?.output || 0), 0);
@@ -349,24 +371,50 @@ export default function ChatPanel() {
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 px-4 pt-3">
             {attachments.map((att, idx) => (
-              <div
-                key={idx}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-bg-elevated text-xs text-text-secondary group"
-              >
-                <svg className="w-3.5 h-3.5 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                </svg>
-                <span className="truncate max-w-[120px]">{att.name}</span>
-                <span className="text-text-faint">{formatFileSize(att.size)}</span>
-                <button
-                  onClick={() => removeAttachment(idx)}
-                  className="ml-1 text-text-faint hover:text-danger transition-colors"
+              isImageFile(att.name) && att.url ? (
+                // Image thumbnail preview
+                <div
+                  key={idx}
+                  className="relative group w-20 h-20 rounded-lg overflow-hidden border border-border bg-bg-elevated cursor-pointer"
+                  onClick={() => openLightbox(att.url!, att.name)}
                 >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <img
+                    src={att.url}
+                    alt={att.name}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+                  <button
+                    onClick={(e) => { e.stopPropagation(); removeAttachment(idx); }}
+                    className="absolute top-1 right-1 p-1 rounded bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ) : (
+                // Non-image file card
+                <div
+                  key={idx}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-bg-elevated text-xs text-text-secondary group"
+                >
+                  <svg className="w-3.5 h-3.5 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                   </svg>
-                </button>
-              </div>
+                  <span className="truncate max-w-[120px]">{att.name}</span>
+                  <span className="text-text-faint">{formatFileSize(att.size)}</span>
+                  <button
+                    onClick={() => removeAttachment(idx)}
+                    className="ml-1 text-text-faint hover:text-danger transition-colors"
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              )
             ))}
           </div>
         )}
@@ -473,6 +521,14 @@ export default function ChatPanel() {
           )}
         </div>
       </div>
+
+      {/* Lightbox */}
+      <Lightbox
+        src={lightboxImage.src}
+        alt={lightboxImage.alt}
+        isOpen={lightboxOpen}
+        onClose={closeLightbox}
+      />
     </div>
   );
 }

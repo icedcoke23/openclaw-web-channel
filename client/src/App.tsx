@@ -13,6 +13,7 @@ import ConfigPanel from '@/components/config/ConfigPanel';
 import LogsPanel from '@/components/logs/LogsPanel';
 import SkillsPanel from '@/components/skills/SkillsPanel';
 import NodesPanel from '@/components/nodes/NodesPanel';
+import CronPanel from '@/components/cron/CronPanel';
 
 function PanelRouter() {
   const state = useAppState();
@@ -32,6 +33,8 @@ function PanelRouter() {
       return <SkillsPanel />;
     case 'nodes':
       return <NodesPanel />;
+    case 'cron':
+      return <CronPanel />;
     default:
       return <ChatPanel />;
   }

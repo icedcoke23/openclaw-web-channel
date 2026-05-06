@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useAppState, useAppDispatch } from '@/store';
 import { useApi } from '@/hooks/useApi';
 import Modal from '@/components/Modal';
@@ -14,6 +14,32 @@ export default function SessionsPanel() {
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [transcript, setTranscript] = useState<string>('');
   const [showTranscript, setShowTranscript] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredSessions = useMemo(() => {
+    if (!searchQuery.trim()) return state.sessions;
+    const query = searchQuery.toLowerCase();
+    return state.sessions.filter(s =>
+      s.id?.toLowerCase().includes(query) ||
+      s.title?.toLowerCase().includes(query)
+    );
+  }, [state.sessions, searchQuery]);
+
+  const highlightText = (text: string, query: string): React.ReactNode => {
+    if (!query.trim()) return text;
+    const lowerText = text.toLowerCase();
+    const lowerQuery = query.toLowerCase();
+    const index = lowerText.indexOf(lowerQuery);
+    if (index === -1) return text;
+
+    return (
+      <>
+        {text.slice(0, index)}
+        <span className="bg-accent/30 text-accent font-medium">{text.slice(index, index + query.length)}</span>
+        {text.slice(index + query.length)}
+      </>
+    );
+  };
 
   const loadSessions = useCallback(async () => {
     setLoading(true);
@@ -146,19 +172,54 @@ export default function SessionsPanel() {
         </div>
       </div>
 
-      {state.sessions.length === 0 ? (
-        <div className="text-center py-16">
-          <div className="text-text-faint text-sm mb-3">暂无会话</div>
+      {/* Search input */}
+      <div className="relative">
+        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <svg className="w-4 h-4 text-text-faint" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="搜索会话..."
+          className="w-full pl-10 pr-4 py-2 bg-bg-tertiary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-faint focus:outline-none focus:border-accent/50 transition-colors"
+        />
+        {searchQuery && (
           <button
-            onClick={createSession}
-            className="px-4 py-2 bg-accent-muted/20 text-accent rounded-lg text-sm hover:bg-accent-muted/30 transition-colors"
+            onClick={() => setSearchQuery('')}
+            className="absolute inset-y-0 right-0 pr-3 flex items-center text-text-faint hover:text-text-secondary transition-colors"
           >
-            创建第一个会话
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
+        )}
+      </div>
+
+      {/* Session count */}
+      <div className="text-xs text-text-muted">
+        共 {filteredSessions.length} 个会话
+      </div>
+
+      {filteredSessions.length === 0 ? (
+        <div className="text-center py-16">
+          <div className="text-text-faint text-sm mb-3">
+            {searchQuery ? '未找到匹配的会话' : '暂无会话'}
+          </div>
+          {!searchQuery && (
+            <button
+              onClick={createSession}
+              className="px-4 py-2 bg-accent-muted/20 text-accent rounded-lg text-sm hover:bg-accent-muted/30 transition-colors"
+            >
+              创建第一个会话
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-2">
-          {state.sessions.map((session) => (
+          {filteredSessions.map((session) => (
             <div
               key={session.id}
               className="bg-bg-tertiary border border-border rounded-xl p-4 group hover:border-accent/30 transition-colors"
@@ -167,7 +228,9 @@ export default function SessionsPanel() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <h3 className="text-sm font-medium text-text-primary truncate">
-                      {session.title || session.id.slice(0, 12)}
+                      {session.title
+                        ? highlightText(session.title, searchQuery)
+                        : highlightText(session.id.slice(0, 12), searchQuery)}
                     </h3>
                     {state.activeSessionId === session.id && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-muted/20 text-accent">
@@ -176,7 +239,7 @@ export default function SessionsPanel() {
                     )}
                   </div>
                   <div className="flex items-center gap-3 mt-1 text-xs text-text-faint">
-                    <span>ID: {session.id.slice(0, 8)}</span>
+                    <span>ID: {highlightText(session.id.slice(0, 8), searchQuery)}</span>
                     {session.message_count !== undefined && (
                       <span>{session.message_count} 条消息</span>
                     )}

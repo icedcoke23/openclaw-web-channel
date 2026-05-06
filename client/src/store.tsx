@@ -97,6 +97,9 @@ export type AppAction =
   | { type: 'SET_MODELS'; payload: ModelOption[] }
   | { type: 'SET_CHANNELS'; payload: Channel[] }
   | { type: 'SET_CRON_JOBS'; payload: CronJob[] }
+  | { type: 'ADD_CRON_JOB'; payload: CronJob }
+  | { type: 'UPDATE_CRON_JOB'; payload: CronJob }
+  | { type: 'DELETE_CRON_JOB'; payload: string }
   | { type: 'ADD_ACTIVITY'; payload: ActivityItem }
   | { type: 'SET_ACTIVITY_FEED'; payload: ActivityItem[] }
   | { type: 'ADD_LOG'; payload: LogEntry }
@@ -196,6 +199,23 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case 'SET_CRON_JOBS':
       return { ...state, cronJobs: action.payload };
+
+    case 'ADD_CRON_JOB':
+      return { ...state, cronJobs: [...state.cronJobs, action.payload] };
+
+    case 'UPDATE_CRON_JOB':
+      return {
+        ...state,
+        cronJobs: state.cronJobs.map((job) =>
+          job.id === action.payload.id ? action.payload : job
+        ),
+      };
+
+    case 'DELETE_CRON_JOB':
+      return {
+        ...state,
+        cronJobs: state.cronJobs.filter((job) => job.id !== action.payload),
+      };
 
     case 'ADD_ACTIVITY':
       return {

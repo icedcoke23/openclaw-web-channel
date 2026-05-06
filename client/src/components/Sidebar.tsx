@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { useAppState, useAppDispatch } from '@/store';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useApi } from '@/hooks/useApi';
@@ -10,6 +10,16 @@ export default function Sidebar() {
   const dispatch = useAppDispatch();
   const { rpc } = useWebSocket();
   const { addToast } = useApi();
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredSessions = useMemo(() => {
+    if (!searchQuery.trim()) return state.sessions;
+    const query = searchQuery.toLowerCase();
+    return state.sessions.filter(s =>
+      s.id?.toLowerCase().includes(query) ||
+      s.title?.toLowerCase().includes(query)
+    );
+  }, [state.sessions, searchQuery]);
 
   const loadSessions = useCallback(async () => {
     try {
@@ -80,21 +90,51 @@ export default function Sidebar() {
         </div>
       </div>
 
+      {/* Search input */}
+      <div className="px-3 py-2 border-b border-border">
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+            <svg className="w-3.5 h-3.5 text-text-faint" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="搜索会话..."
+            className="w-full pl-8 pr-7 py-1.5 bg-bg-tertiary border border-border rounded-md text-xs text-text-primary placeholder:text-text-faint focus:outline-none focus:border-accent/50 transition-colors"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute inset-y-0 right-0 pr-2 flex items-center text-text-faint hover:text-text-secondary transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Session list */}
       <div className="flex-1 overflow-y-auto py-2">
-        {state.sessions.length === 0 ? (
+        {filteredSessions.length === 0 ? (
           <div className="px-4 py-8 text-center text-text-faint text-sm">
-            <p>暂无会话</p>
-            <button
-              onClick={createSession}
-              className="mt-3 px-3 py-1.5 bg-accent-muted/20 text-accent rounded-md text-xs hover:bg-accent-muted/30 transition-colors"
-            >
-              创建第一个会话
-            </button>
+            <p>{searchQuery ? '未找到匹配的会话' : '暂无会话'}</p>
+            {!searchQuery && (
+              <button
+                onClick={createSession}
+                className="mt-3 px-3 py-1.5 bg-accent-muted/20 text-accent rounded-md text-xs hover:bg-accent-muted/30 transition-colors"
+              >
+                创建第一个会话
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-0.5 px-2">
-            {state.sessions.map((session) => (
+            {filteredSessions.map((session) => (
               <button
                 key={session.id}
                 onClick={() => switchSession(session.id)}
@@ -128,7 +168,7 @@ export default function Sidebar() {
       {/* Footer */}
       <div className="p-3 border-t border-border">
         <div className="text-[11px] text-text-faint text-center">
-          共 {state.sessions.length} 个会话
+          共 {filteredSessions.length} 个会话{searchQuery && ` (筛选自 ${state.sessions.length})`}
         </div>
       </div>
 

@@ -77,6 +77,14 @@ export default function CommandPalette() {
         action: () => dispatch({ type: 'SET_ACTIVE_PANEL', payload: 'nodes' as PanelType }),
       },
       {
+        id: 'panel-cron',
+        label: '打开定时任务面板',
+        description: '管理定时执行的任务',
+        icon: '⏰',
+        keywords: ['cron', '定时任务', '定时器', '计划任务'],
+        action: () => dispatch({ type: 'SET_ACTIVE_PANEL', payload: 'cron' as PanelType }),
+      },
+      {
         id: 'toggle-sidebar',
         label: '切换侧边栏',
         description: '显示或隐藏会话列表',

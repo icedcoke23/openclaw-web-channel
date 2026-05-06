@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useAppState, useAppDispatch } from '@/store';
 import { useApi } from '@/hooks/useApi';
 import { formatTime } from '@/lib/markdown';
-import type { Channel, CronJob, ActivityItem } from '@/types';
+import type { Channel, CronJob, ActivityItem, DiskUsage } from '@/types';
 
 function StatCard({
   label,
@@ -35,6 +35,7 @@ export default function DashboardPanel() {
   const dispatch = useAppDispatch();
   const { addToast } = useApi();
   const [loading, setLoading] = useState(true);
+  const [diskUsage, setDiskUsage] = useState<DiskUsage | null>(null);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -53,6 +54,7 @@ export default function DashboardPanel() {
           cpu?: number;
           memory?: number;
           model?: string;
+          disk?: DiskUsage;
         };
         dispatch({
           type: 'SET_GATEWAY_STATUS',
@@ -64,8 +66,12 @@ export default function DashboardPanel() {
             cpu: s.cpu,
             memory: s.memory,
             model: s.model,
+            disk: s.disk,
           },
         });
+        if (s.disk) {
+          setDiskUsage(s.disk);
+        }
       }
 
       if (channelsRes.status === 'fulfilled' && channelsRes.value) {
@@ -99,6 +105,26 @@ export default function DashboardPanel() {
     if (h > 0) return `${h}小时 ${m}分钟`;
     return `${m}分钟`;
   };
+
+  const formatBytes = (bytes?: number): string => {
+    if (bytes === undefined || bytes === null) return '-';
+    const gb = bytes / (1024 * 1024 * 1024);
+    if (gb >= 1024) {
+      return `${(gb / 1024).toFixed(2)} TB`;
+    }
+    return `${gb.toFixed(2)} GB`;
+  };
+
+  const getDiskColorClass = (usagePercent: number): { bar: string; text: string } => {
+    if (usagePercent > 85) return { bar: 'bg-danger', text: 'text-danger' };
+    if (usagePercent >= 70) return { bar: 'bg-warning', text: 'text-warning' };
+    return { bar: 'bg-success', text: 'text-success' };
+  };
+
+  const diskColors = useMemo(() => {
+    if (!diskUsage) return { bar: 'bg-success', text: 'text-success' };
+    return getDiskColorClass(diskUsage.usagePercent);
+  }, [diskUsage]);
 
   const activityIcons: Record<string, string> = {
     message: '💬',
@@ -174,8 +200,8 @@ export default function DashboardPanel() {
         />
       </div>
 
-      {/* CPU & Memory */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* CPU & Memory & Disk */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="bg-bg-tertiary border border-border rounded-xl p-4">
           <h3 className="text-sm font-medium text-text-secondary mb-3">CPU 使用率</h3>
           <div className="flex items-center gap-3">
@@ -203,6 +229,30 @@ export default function DashboardPanel() {
               {state.gatewayStatus?.memory ?? 0}%
             </span>
           </div>
+        </div>
+        <div className="bg-bg-tertiary border border-border rounded-xl p-4">
+          <h3 className="text-sm font-medium text-text-secondary mb-3">磁盘使用</h3>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-2 bg-bg-elevated rounded-full overflow-hidden">
+              <div
+                className={`h-full ${diskColors.bar} rounded-full transition-all duration-500`}
+                style={{ width: `${diskUsage?.usagePercent ?? 0}%` }}
+              />
+            </div>
+            <span className={`text-sm font-mono w-12 text-right ${diskColors.text}`}>
+              {diskUsage?.usagePercent ?? 0}%
+            </span>
+          </div>
+          {diskUsage && (
+            <div className="mt-2 text-xs text-text-muted">
+              总容量: {formatBytes(diskUsage.total)} / 已用: {formatBytes(diskUsage.used)} / 可用: {formatBytes(diskUsage.free)}
+            </div>
+          )}
+          {!diskUsage && (
+            <div className="mt-2 text-xs text-text-faint">
+              无法获取磁盘信息
+            </div>
+          )}
         </div>
       </div>
 

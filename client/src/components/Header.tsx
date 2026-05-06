@@ -6,6 +6,7 @@ const PANEL_TABS: { key: PanelType; label: string; icon: string }[] = [
   { key: 'chat', label: '对话', icon: '💬' },
   { key: 'dashboard', label: '仪表盘', icon: '📊' },
   { key: 'sessions', label: '会话', icon: '📁' },
+  { key: 'cron', label: '定时任务', icon: '⏰' },
   { key: 'config', label: '配置', icon: '⚙️' },
   { key: 'logs', label: '日志', icon: '📋' },
   { key: 'skills', label: '技能', icon: '🧩' },

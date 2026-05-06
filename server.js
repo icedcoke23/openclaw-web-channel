@@ -775,14 +775,57 @@ app.get('/api/gateway/version', async (_req, res) => {
   }
 });
 
+// Helper function to get disk usage
+function getDiskUsage() {
+  try {
+    // Linux/Mac - use df command
+    const output = execSync('df -k /', { encoding: 'utf8' });
+    const lines = output.trim().split('\n');
+    // Skip header line, parse the data line
+    for (let i = 1; i < lines.length; i++) {
+      const parts = lines[i].trim().split(/\s+/);
+      if (parts.length >= 6) {
+        const total = parseInt(parts[1], 10) * 1024; // Convert KB to bytes
+        const used = parseInt(parts[2], 10) * 1024;
+        const free = parseInt(parts[3], 10) * 1024;
+        const usagePercent = Math.round((used / total) * 100);
+        return { total, used, free, usagePercent };
+      }
+    }
+  } catch {
+    // Fallback: try Windows wmic command
+    try {
+      const output = execSync('wmic logicaldisk get size,freespace,caption /format:csv', { encoding: 'utf8' });
+      const lines = output.trim().split('\n').filter(line => line.includes(','));
+      for (const line of lines) {
+        const parts = line.split(',');
+        if (parts.length >= 4) {
+          const caption = parts[1].trim();
+          if (caption === 'C:' || caption === '/') {
+            const free = parseInt(parts[2].trim(), 10);
+            const total = parseInt(parts[3].trim(), 10);
+            const used = total - free;
+            const usagePercent = Math.round((used / total) * 100);
+            return { total, used, free, usagePercent };
+          }
+        }
+      }
+    } catch {
+      // Final fallback: return null
+    }
+  }
+  return null;
+}
+
 // Gateway status
 app.get('/api/status', async (_req, res) => {
   try {
+    const disk = getDiskUsage();
     if (gateway.status !== 'connected') {
-      return res.json({ status: gateway.status, version: null, clients: browserClients.size });
+      return res.json({ status: gateway.status, version: null, clients: browserClients.size, disk });
     }
     const result = await gateway.rpc('status', {});
-    res.json({ status: gateway.status, version: gateway.version, gateway: result, clients: browserClients.size });
+    res.json({ status: gateway.status, version: gateway.version, gateway: result, clients: browserClients.size, disk });
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
@@ -979,6 +1022,7 @@ app.get('/api/health', async (_req, res) => {
 
 // ── Cron Jobs ─────────────────────────────────────────────────────────────────
 
+// List all cron jobs
 app.get('/api/cron', async (_req, res) => {
   try {
     const result = await gateway.rpc('cron.list', {});
@@ -988,6 +1032,42 @@ app.get('/api/cron', async (_req, res) => {
   }
 });
 
+// Create new cron job
+app.post('/api/cron', async (req, res) => {
+  try {
+    const { name, schedule, enabled, command } = req.body;
+    if (!name) return res.status(400).json({ error: 'name is required' });
+    if (!schedule) return res.status(400).json({ error: 'schedule is required' });
+    if (enabled === undefined) return res.status(400).json({ error: 'enabled is required' });
+
+    const result = await gateway.rpc('cron.create', { name, schedule, enabled, command });
+    res.json({ success: true, job: result });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// Get single cron job details
+app.get('/api/cron/:id', async (req, res) => {
+  try {
+    const result = await gateway.rpc('cron.get', { id: req.params.id });
+    res.json({ job: result });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// Delete cron job
+app.delete('/api/cron/:id', async (req, res) => {
+  try {
+    await gateway.rpc('cron.delete', { id: req.params.id });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// Run cron job immediately
 app.post('/api/cron/:id/run', async (req, res) => {
   try {
     const result = await gateway.rpc('cron.run', { id: req.params.id });
@@ -997,6 +1077,7 @@ app.post('/api/cron/:id/run', async (req, res) => {
   }
 });
 
+// Update cron job
 app.patch('/api/cron/:id', async (req, res) => {
   try {
     const result = await gateway.rpc('cron.patch', { id: req.params.id, ...req.body });

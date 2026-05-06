@@ -1,6 +1,7 @@
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useRef, useEffect, useMemo, useState } from 'react';
 import type { Message } from '@/types';
 import { renderMarkdown, enhanceCodeBlocks, copyToClipboard } from '@/lib/markdown';
+import Lightbox from '@/components/Lightbox';
 
 interface MessageBubbleProps {
   message: Message;
@@ -13,11 +14,42 @@ export default function MessageBubble({ message, onCopy, onRegenerate }: Message
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
 
+  // Lightbox state
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string }>({ src: '', alt: '' });
+
   const renderedContent = useMemo(() => renderMarkdown(message.content), [message.content]);
+
+  // Image detection helper
+  const isImageFile = (filename: string): boolean => {
+    const ext = filename.split('.').pop()?.toLowerCase();
+    return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext || '');
+  };
+
+  // Open lightbox with image
+  const openLightbox = (src: string, alt: string) => {
+    setLightboxImage({ src, alt });
+    setLightboxOpen(true);
+  };
+
+  // Close lightbox
+  const closeLightbox = () => {
+    setLightboxOpen(false);
+  };
 
   useEffect(() => {
     if (contentRef.current) {
       enhanceCodeBlocks(contentRef.current);
+
+      // Add click handlers for markdown images
+      const images = contentRef.current.querySelectorAll('img[data-lightbox="true"]');
+      images.forEach((img) => {
+        img.addEventListener('click', () => {
+          const src = img.getAttribute('src') || '';
+          const alt = img.getAttribute('alt') || '';
+          openLightbox(src, alt);
+        });
+      });
     }
   }, [renderedContent]);
 
@@ -109,15 +141,33 @@ export default function MessageBubble({ message, onCopy, onRegenerate }: Message
         {message.attachments && message.attachments.length > 0 && (
           <div className={`flex flex-wrap gap-2 mt-2 ${isUser ? 'justify-end' : ''}`}>
             {message.attachments.map((att, idx) => (
-              <div
-                key={idx}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-bg-elevated text-xs text-text-muted"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                </svg>
-                <span className="truncate max-w-[150px]">{att.name}</span>
-              </div>
+              isImageFile(att.name) && att.url ? (
+                // Image thumbnail preview
+                <div
+                  key={idx}
+                  className="relative group w-16 h-16 rounded-lg overflow-hidden border border-border bg-bg-elevated cursor-pointer"
+                  onClick={() => openLightbox(att.url!, att.name)}
+                >
+                  <img
+                    src={att.url}
+                    alt={att.name}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+                </div>
+              ) : (
+                // Non-image file card
+                <div
+                  key={idx}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-bg-elevated text-xs text-text-muted"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                  </svg>
+                  <span className="truncate max-w-[150px]">{att.name}</span>
+                </div>
+              )
             ))}
           </div>
         )}
@@ -165,6 +215,14 @@ export default function MessageBubble({ message, onCopy, onRegenerate }: Message
           </div>
         )}
       </div>
+
+      {/* Lightbox */}
+      <Lightbox
+        src={lightboxImage.src}
+        alt={lightboxImage.alt}
+        isOpen={lightboxOpen}
+        onClose={closeLightbox}
+      />
     </div>
   );
 }
